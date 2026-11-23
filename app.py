@@ -11,7 +11,7 @@ from pydantic import BaseModel
 st.set_page_config(page_title="Tableau de Bord Privé", page_icon="🔒", layout="wide")
 
 # --- 2. VERROU PAR MOT DE PASSE POUR ENTRER SUR TON SITE ---
-MOT_DE_PASSE_SECRET = "#Ak300112@"  # <-- Tu peux changer ce mot de passe d'accès
+MOT_DE_PASSE_SECRET = "Enseignes2026"  # <-- Remets ton mot de passe habituel ici
 
 if "connecte" not in st.session_state:
     st.session_state["connecte"] = False
@@ -61,15 +61,15 @@ def collecter_actualites(rss_urls, max_articles=4):
 
 def appel_ia_news(prompt):
     response = client.models.generate_content(
-        model="gemini-3.8-flash",
+        model="gemini-2.5-flash",
         contents=prompt,
-        config=types.GenerateContentConfig(temperature=0.7)
+        config=types.GenerateContentConfig(temperature=0.8)
     )
     return response.text
 
 def generer_newsletter(matiere, secteur):
     prompt = f"""Tu es le directeur éditorial d'une entreprise spécialisée dans : {secteur}.
-Rédige une newsletter LinkedIn courte et percutante.
+Rédige une newsletter LinkedIn courte, originale et percutante.
 Structure :
 1. Un titre accrocheur (moins de 60 caractères).
 2. Une introduction courte sur l'importance de la visibilité physique.
@@ -80,7 +80,7 @@ Infos : {matiere}"""
     executor = ThreadPoolExecutor(max_workers=1)
     futur = executor.submit(appel_ia_news, prompt)
     try:
-        texte = futur.result(timeout=12)
+        texte = futur.result(timeout=15)
         executor.shutdown(wait=False)
         return texte
     except Exception:
@@ -104,9 +104,15 @@ class QualificationProspect(BaseModel):
     accroche_linkedin: str
     objet_email: str
 
-def chercher_entreprises(code_postal, activite, limite):
+def chercher_entreprises(code_postal, activite, limite, page=1):
     url = "https://recherche-entreprises.api.gouv.fr/search"
-    params = {"q": activite, "code_postal": code_postal, "etat_administratif": "A", "per_page": limite}
+    params = {
+        "q": activite,
+        "code_postal": code_postal,
+        "etat_administratif": "A",
+        "per_page": limite,
+        "page": page
+    }
     try:
         rep = requests.get(url, params=params, timeout=10)
         rep.raise_for_status()
@@ -116,34 +122,49 @@ def chercher_entreprises(code_postal, activite, limite):
 
 def appel_ia_prospect(prompt):
     response = client.models.generate_content(
-        model="gemini-3.8-flash",
+        model="gemini-2.5-flash",
         contents=prompt,
-        config={"response_mime_type": "application/json", "response_schema": QualificationProspect}
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=QualificationProspect,
+            temperature=0.85  # Favorise des formulations variées et créatives
+        )
     )
     return QualificationProspect.model_validate_json(response.text)
 
-def qualifier_prospect(entreprise, offre, activite, ia_active):
+def qualifier_prospect(entreprise, offre, activite):
     nom = entreprise.get("nom_complet", "Entreprise")
     naf = entreprise.get("activite_principale", "")
+    adresse = entreprise.get("siege", {}).get("adresse", "Adresse non précisée")
+    date_creation = entreprise.get("date_creation", "Inconnue")
 
-    if ia_active:
-        prompt = f"Analyse {nom} (Code NAF {naf}) pour vendre : {offre}. Donne un score sur 10, un produit à vendre, un message LinkedIn et un objet d'email."
-        executor = ThreadPoolExecutor(max_workers=1)
-        futur = executor.submit(appel_ia_prospect, prompt)
-        try:
-            res = futur.result(timeout=8)
-            executor.shutdown(wait=False)
-            return res, True
-        except Exception:
-            executor.shutdown(wait=False)
-            ia_active = False
+    prompt = f"""Tu es un commercial créatif spécialisé dans : {offre}.
+Analyse cette entreprise précise et invente une approche UNIQUE adaptée à sa situation :
+- Nom : {nom}
+- Activité recherchée : {activite} (Code NAF : {naf})
+- Adresse exacte : {adresse}
+- Date de création : {date_creation}
 
-    return QualificationProspect(
-        score_pertinence=8,
-        angle_approche=f"Enseigne de façade et habillage vitrine ({activite})",
-        accroche_linkedin=f"Bonjour, j'accompagne les professionnels autour de {nom} pour leurs enseignes et panneaux.",
-        objet_email=f"Une idée pour booster la visibilité de {nom}"
-    ), ia_active
+Consignes d'interprétation obligatoires :
+- Regarde l'adresse (avenue/route passante = visibilité voiture/totem/grande façade ; rue/centre = vitrine/enseigne drapeau/stop-trottoir ; zone artisanale = panneau directionnel/flocage).
+- Regarde la date de création (récente = installation complète ; ancienne = rafraîchissement/modernisation d'enseigne).
+- Varie ton style d'écriture pour ne jamais répéter les mêmes tournures de phrases.
+- Donne une note sur 10, le produit précis à proposer, un message LinkedIn court (moins de 240 caractères) et un objet d'email original."""
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    futur = executor.submit(appel_ia_prospect, prompt)
+    try:
+        res = futur.result(timeout=15)
+        executor.shutdown(wait=False)
+        return res, "IA sur mesure"
+    except Exception:
+        executor.shutdown(wait=False)
+        return QualificationProspect(
+            score_pertinence=7,
+            angle_approche=f"Enseigne extérieure et habillage vitrine adaptés à {adresse}",
+            accroche_linkedin=f"Bonjour, je travaille avec les commerces et pros du secteur ({activite}) autour de {nom} sur leur visibilité façade. Au plaisir d'échanger !",
+            objet_email=f"Une idée visibilité pour {nom}"
+        ), "Mode rapide"
 
 # --- 6. LES DEUX ONGLETS DU SITE ---
 tab1, tab2 = st.tabs(["📝 Ma Newsletter LinkedIn", "🎯 Prospection Locale"])
@@ -159,34 +180,37 @@ with tab1:
 
 with tab2:
     st.header("Trouver des commerçants à démarcher")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
         code_postal = st.text_input("Code Postal cible :", value="34670")
     with col2:
         metier = st.text_input("Métier visé :", value="restaurant")
+    with col3:
+        page_num = st.number_input("Page (1, 2, 3...) :", min_value=1, max_value=20, value=1)
 
-    limite = st.slider("Nombre de prospects à analyser :", 1, 15, 5)
+    limite = st.slider("Nombre de prospects à analyser sur cette page :", 1, 15, 5)
 
     if st.button("🔍 Lancer la recherche"):
-        with st.spinner("Recherche dans l'annuaire officiel..."):
-            entreprises = chercher_entreprises(code_postal, metier, limite)
+        with st.spinner(f"Recherche page {page_num} dans l'annuaire officiel..."):
+            entreprises = chercher_entreprises(code_postal, metier, limite, page_num)
             if not entreprises:
-                st.error("Aucune entreprise trouvée.")
+                st.error("Aucune entreprise trouvée sur cette page. Essaie la page 1 ou un autre métier.")
             else:
                 barre = st.progress(0)
                 tableau = []
-                ia_ok = True
                 for i, ent in enumerate(entreprises):
-                    analyse, ia_ok = qualifier_prospect(ent, "Enseignes, logos sur bâtiment et panneaux", metier, ia_ok)
+                    analyse, source = qualifier_prospect(ent, "Enseignes, logos sur bâtiment, vitrophanie et panneaux", metier)
                     tableau.append({
                         "Entreprise": ent.get("nom_complet", "Inconnu"),
+                        "Créée en": str(ent.get("date_creation", ""))[:4],
                         "Adresse": ent.get("siege", {}).get("adresse", ""),
                         "Note /10": analyse.score_pertinence,
-                        "Produit recommandé": analyse.angle_approche,
+                        "Idée sur mesure": analyse.angle_approche,
                         "Message LinkedIn": analyse.accroche_linkedin,
-                        "Objet Email": analyse.objet_email
+                        "Objet Email": analyse.objet_email,
+                        "Rédaction": source
                     })
                     barre.progress((i + 1) / len(entreprises))
 
-                st.success("Analyse terminée !")
+                st.success("Analyse terminée ! Passe à la page suivante la prochaine fois pour voir de nouveaux commerces.")
                 st.dataframe(tableau, use_container_width=True)

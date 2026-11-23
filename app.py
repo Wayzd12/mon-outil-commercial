@@ -11,7 +11,7 @@ from pydantic import BaseModel
 st.set_page_config(page_title="Tableau de Bord Privé", page_icon="🔒", layout="wide")
 
 # --- 2. VERROU PAR MOT DE PASSE POUR ENTRER SUR TON SITE ---
-MOT_DE_PASSE_SECRET = "Enseignes2026"  # <-- Remets ton mot de passe habituel ici
+MOT_DE_PASSE_SECRET = "projet-commerce4321"  # <-- Remets ton mot de passe habituel ici
 
 if "connecte" not in st.session_state:
     st.session_state["connecte"] = False

@@ -13,7 +13,7 @@ from pydantic import BaseModel
 st.set_page_config(page_title="Tableau de Bord Imprimerie", page_icon="🖨️", layout="wide")
 
 # --- 2. VERROU PAR MOT DE PASSE ---
-MOT_DE_PASSE_SECRET = "Enseignes2026"  # <-- Remets ton mot de passe ici
+MOT_DE_PASSE_SECRET = "outilcommercial4321"  # <-- Remets ton mot de passe ici
 
 if "connecte" not in st.session_state:
     st.session_state["connecte"] = False

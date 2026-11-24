@@ -46,7 +46,7 @@ client = genai.Client(api_key=api_key)
 
 def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.9):
     """Appelle toujours la vraie IA Google avec patience (aucun texte préfait)."""
-    modeles_valides = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
+    modeles_valides = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
     zone_statut = st.empty()
     derniere_erreur = ""
 

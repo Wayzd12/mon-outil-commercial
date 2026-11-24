@@ -45,8 +45,8 @@ REGLAGES_PAR_DEFAUT = {
     "p_corps": "Donne 3 conseils pratiques et actionnables liés à l'impression ou la signalétique. Pour chaque conseil, ajoute une ligne en gras '**Ce que ça change pour vous :**'.",
     "p_conclusion": "Termine par 2 lignes de conclusion positives et une question ouverte simple pour inciter les lecteurs à commenter.",
     "prosp_offre": "Impression petit et grand format : cartes de visite, flyers, brochures, menus, étiquettes, enseignes de façade, logos en relief, vitrophanie, panneaux de chantier, marquage véhicule",
-    "prosp_consignes": "1. Sélectionne en priorité les entreprises les plus pertinentes par rapport au thème demandé (en décodant leur code activité NAF et leur nom).\n2. Adapte le produit recommandé à l'adresse (avenue/zone = grande enseigne ou panneau ; rue commerçante = vitrine, flyers ou menus ; artisan = panneaux de chantier et cartes de visite) et à l'année de création (récente = pack création ; ancienne = modernisation).\n3. Écris un message LinkedIn court (max 230 caractères), poli, local et jamais répétitif d'une ligne à l'autre.",
-    "codes_postaux": "34670, 34740, 34130",
+    "prosp_consignes": "1. Tiens compte de la localisation précise ({lieu_cible}) et de l'adresse exacte de chaque entreprise.\n2. Sélectionne en priorité les entreprises les plus pertinentes par rapport au thème demandé (en décodant leur code activité NAF et leur nom).\n3. Adapte le produit recommandé à l'emplacement (avenue/zone = grande enseigne ou panneau ; rue commerçante = vitrine, flyers ou menus ; artisan = panneaux de chantier et cartes de visite) et à l'année de création (récente = pack création ; ancienne = modernisation).\n4. Écris un message LinkedIn court (max 230 caractères), poli, ancré localement sur {lieu_cible} et jamais répétitif d'une ligne à l'autre.",
+    "codes_postaux": "34670",
     "zone_lat": 43.6667,
     "zone_lon": 4.0303,
     "rayon_km": 10
@@ -173,7 +173,7 @@ def collecter_actualites(rss_urls, max_articles=5):
             pass
     return articles
 
-# --- 6. OUTILS POUR LA PROSPECTION ---
+# --- 6. OUTILS GÉOGRAPHIQUES & PROSPECTION ---
 class ProspectSelectionne(BaseModel):
     numero_entreprise: int
     note_pertinence: int
@@ -186,7 +186,6 @@ class ListeAnalyses(BaseModel):
     resultats: list[ProspectSelectionne]
 
 def calculer_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calcule la distance réelle en kilomètres entre deux points GPS."""
     rayon_terre = 6371.0
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
@@ -195,6 +194,94 @@ def calculer_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> 
         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
     )
     return rayon_terre * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def identifier_commune_gps(lat: float, lon: float):
+    """Traduit un point GPS cliqué sur la carte en nom de commune et codes postaux."""
+    try:
+        rep = requests.get(
+            "https://geo.api.gouv.fr/communes",
+            params={"lat": round(lat, 5), "lon": round(lon, 5), "fields": "nom,codesPostaux"},
+            timeout=5
+        )
+        if rep.status_code == 200 and rep.json():
+            commune = rep.json()[0]
+            return commune.get("nom", ""), commune.get("codesPostaux", [])
+    except Exception:
+        pass
+    return "", []
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def identifier_communes_cp(codes_postaux_str: str):
+    """Traduit un ou plusieurs codes postaux en noms de villes réels."""
+    codes = [c.strip() for c in codes_postaux_str.split(",") if c.strip()]
+    villes = []
+    for cp in codes[:5]:
+        try:
+            rep = requests.get(
+                "https://geo.api.gouv.fr/communes",
+                params={"codePostal": cp, "fields": "nom"},
+                timeout=5
+            )
+            if rep.status_code == 200:
+                for c in rep.json():
+                    nom_v = c.get("nom")
+                    if nom_v and nom_v not in villes:
+                        villes.append(nom_v)
+        except Exception:
+            pass
+    return villes
+
+def extraire_etablissement_local(ent: dict, mode_zone: bool, codes_cibles: list, zone_lat: float, zone_lon: float, rayon_km: int):
+    """Vérifie les établissements locaux (pas seulement le siège) pour garder les vraies entreprises sur place."""
+    candidats_etab = []
+    if ent.get("matching_etablissements"):
+        candidats_etab.extend(ent["matching_etablissements"])
+    if ent.get("siege"):
+        candidats_etab.append(ent["siege"])
+
+    for etab in candidats_etab:
+        lat_s = etab.get("latitude")
+        lon_s = etab.get("longitude")
+        cp_s = str(etab.get("code_postal") or "").strip()
+
+        if mode_zone:
+            if lat_s and lon_s:
+                try:
+                    lat_f, lon_f = float(lat_s), float(lon_s)
+                    dist = calculer_distance_km(zone_lat, zone_lon, lat_f, lon_f)
+                    if dist <= rayon_km + 1.0:
+                        return {
+                            "nom": ent.get("nom_complet", "Entreprise"),
+                            "naf": ent.get("activite_principale", "Inconnu"),
+                            "creation": str(ent.get("date_creation") or "Inconnue")[:4],
+                            "adresse": etab.get("adresse", ""),
+                            "cp": cp_s,
+                            "lat": lat_f,
+                            "lon": lon_f,
+                            "distance_km": round(dist, 1)
+                        }
+                except ValueError:
+                    pass
+        else:
+            if cp_s in codes_cibles:
+                lat_f, lon_f = None, None
+                if lat_s and lon_s:
+                    try:
+                        lat_f, lon_f = float(lat_s), float(lon_s)
+                    except ValueError:
+                        pass
+                return {
+                    "nom": ent.get("nom_complet", "Entreprise"),
+                    "naf": ent.get("activite_principale", "Inconnu"),
+                    "creation": str(ent.get("date_creation") or "Inconnue")[:4],
+                    "adresse": etab.get("adresse", ""),
+                    "cp": cp_s,
+                    "lat": lat_f,
+                    "lon": lon_f,
+                    "distance_km": None
+                }
+    return None
 
 def chercher_entreprises_pool(
     mode_zone: bool,
@@ -206,90 +293,126 @@ def chercher_entreprises_pool(
     tous_types: bool,
     renouveler: bool
 ):
-    toutes_entreprises = []
+    """Récupère un vivier fiable d'entreprises locales (fonctionne avec 1 code postal comme sur la carte)."""
+    vivier_brut = {}
+    exclure_sci = not any(m in mot_cle.lower() for m in ["immobilier", "sci", "foncier", "location"])
+
+    def ajouter_depuis_reponse(data_json, codes_cibles):
+        for ent in data_json.get("results", []):
+            if ent.get("etat_administratif") != "A":
+                continue
+            naf = str(ent.get("activite_principale") or "")
+            if exclure_sci and naf.startswith("68.20"):
+                continue
+            siren = ent.get("siren") or ent.get("nom_complet")
+            if siren in vivier_brut:
+                continue
+            info_locale = extraire_etablissement_local(ent, mode_zone, codes_cibles, zone_lat, zone_lon, rayon_km)
+            if info_locale:
+                vivier_brut[siren] = info_locale
 
     if mode_zone:
         url_geo = "https://recherche-entreprises.api.gouv.fr/near_point"
-        pages_a_tester = [random.randint(1, 3), 1] if renouveler else [1]
-        for p in dict.fromkeys(pages_a_tester):
-            params_geo = {
-                "lat": round(zone_lat, 5),
-                "long": round(zone_lon, 5),
-                "radius": rayon_km,
-                "per_page": 25,
-                "page": p
-            }
-            try:
-                rep = requests.get(url_geo, params=params_geo, timeout=10)
-                rep.raise_for_status()
-                res = rep.json().get("results", [])
-                for ent in res:
-                    if ent.get("etat_administratif") != "A":
-                        continue
-                    siege = ent.get("siege", {})
-                    lat_s = siege.get("latitude")
-                    lon_s = siege.get("longitude")
-                    if lat_s and lon_s:
-                        try:
-                            # On vérifie que le siège est bien dans le rayon choisi (exclut Paris, Dijon, etc.)
-                            dist = calculer_distance_km(zone_lat, zone_lon, float(lat_s), float(lon_s))
-                            if dist <= rayon_km + 0.5:
-                                toutes_entreprises.append(ent)
-                        except ValueError:
-                            pass
-            except Exception:
-                pass
-            if len(toutes_entreprises) >= 15:
-                break
+        # 1. Toujours charger la page 1 pour être sûr d'avoir des résultats et connaître total_pages
+        params_p1 = {
+            "lat": round(zone_lat, 5),
+            "long": round(zone_lon, 5),
+            "radius": rayon_km,
+            "per_page": 25,
+            "page": 1
+        }
+        try:
+            rep1 = requests.get(url_geo, params=params_p1, timeout=10)
+            if rep1.status_code == 200:
+                json1 = rep1.json()
+                ajouter_depuis_reponse(json1, [])
+                total_pages = int(json1.get("total_pages", 1))
+                # 2. Si renouveler est activé et qu'il y a d'autres pages, on pioche aussi une page aléatoire
+                if renouveler and total_pages > 1:
+                    page_supp = random.randint(2, min(total_pages, 6))
+                    params_p1["page"] = page_supp
+                    rep2 = requests.get(url_geo, params=params_p1, timeout=10)
+                    if rep2.status_code == 200:
+                        ajouter_depuis_reponse(rep2.json(), [])
+        except Exception:
+            pass
+
+        # 3. Secours automatique si une zone rurale renvoie peu de résultats : on utilise le code postal du point cliqué
+        if len(vivier_brut) < 6:
+            _, cps_gps = identifier_commune_gps(zone_lat, zone_lon)
+            if cps_gps:
+                for cp in cps_gps[:2]:
+                    try:
+                        rep_secours = requests.get(
+                            "https://recherche-entreprises.api.gouv.fr/search",
+                            params={"code_postal": cp, "etat_administratif": "A", "per_page": 25, "page": 1},
+                            timeout=8
+                        )
+                        if rep_secours.status_code == 200:
+                            # On passe en vérification par code postal pour ce secours local
+                            for ent in rep_secours.json().get("results", []):
+                                if ent.get("etat_administratif") != "A":
+                                    continue
+                                naf = str(ent.get("activite_principale") or "")
+                                if exclure_sci and naf.startswith("68.20"):
+                                    continue
+                                siren = ent.get("siren") or ent.get("nom_complet")
+                                if siren not in vivier_brut:
+                                    info_cp = extraire_etablissement_local(ent, False, cps_gps, zone_lat, zone_lon, rayon_km)
+                                    if info_cp:
+                                        vivier_brut[siren] = info_cp
+                    except Exception:
+                        pass
     else:
         codes = [c.strip() for c in codes_postaux_str.split(",") if c.strip()]
         url = "https://recherche-entreprises.api.gouv.fr/search"
+        mots = mot_cle.strip().split()
+        utiliser_q = (not tous_types) and (len(mots) == 1) and (len(mots[0]) >= 3)
+
         for cp in codes:
-            page_api = random.randint(1, 3) if renouveler else 1
+            # 1. Requête ciblée si 1 mot-clé précis, sinon large sur le code postal
             params = {
                 "code_postal": cp,
                 "etat_administratif": "A",
                 "per_page": 25,
-                "page": page_api
+                "page": 1
             }
-            mots = mot_cle.strip().split()
-            if not tous_types and len(mots) == 1:
-                params["q"] = mot_cle.strip()
+            if utiliser_q:
+                params["q"] = mots[0]
 
             try:
-                rep = requests.get(url, params=params, timeout=8)
-                rep.raise_for_status()
-                res = rep.json().get("results", [])
-                if len(res) < 5:
+                rep1 = requests.get(url, params=params, timeout=8)
+                if rep1.status_code == 200:
+                    json1 = rep1.json()
+                    ajouter_depuis_reponse(json1, codes)
+                    total_pages = int(json1.get("total_pages", 1))
+
+                    if renouveler and total_pages > 1:
+                        page_supp = random.randint(2, min(total_pages, 6))
+                        params["page"] = page_supp
+                        rep2 = requests.get(url, params=params, timeout=8)
+                        if rep2.status_code == 200:
+                            ajouter_depuis_reponse(rep2.json(), codes)
+
+                # 2. Si le mot-clé strict a donné trop peu de résultats sur un seul code postal, on élargit automatiquement
+                if len(vivier_brut) < 6 and "q" in params:
                     params_larges = {
                         "code_postal": cp,
                         "etat_administratif": "A",
                         "per_page": 25,
                         "page": 1
                     }
-                    rep2 = requests.get(url, params=params_larges, timeout=8)
-                    if rep2.status_code == 200:
-                        res.extend(rep2.json().get("results", []))
-
-                for ent in res:
-                    siege_cp = str(ent.get("siege", {}).get("code_postal") or "").strip()
-                    # On garde uniquement les entreprises dont le siège est réellement dans les codes postaux demandés
-                    if siege_cp in codes:
-                        toutes_entreprises.append(ent)
+                    rep_large = requests.get(url, params=params_larges, timeout=8)
+                    if rep_large.status_code == 200:
+                        ajouter_depuis_reponse(rep_large.json(), codes)
             except Exception:
                 pass
 
-    # Suppression des doublons par SIREN
-    uniques = {}
-    for ent in toutes_entreprises:
-        siren = ent.get("siren") or ent.get("nom_complet")
-        uniques[siren] = ent
-
-    liste_propre = list(uniques.values())
+    liste_propre = list(vivier_brut.values())
     if renouveler:
         random.shuffle(liste_propre)
     else:
-        liste_propre.sort(key=lambda x: str(x.get("date_creation") or "0000"), reverse=True)
+        liste_propre.sort(key=lambda x: str(x.get("creation") or "0000"), reverse=True)
 
     return liste_propre[:25]
 
@@ -405,7 +528,7 @@ with tab2:
             "Code(s) postal(aux) :",
             value=reg["codes_postaux"],
             disabled=st.session_state["mode_carte_zone"],
-            help="Désactivé lorsque la sélection sur carte est ouverte."
+            help="Tu peux mettre un seul code postal (ex: 34670) ou plusieurs séparés par une virgule."
         )
 
     with col_btn_carte:
@@ -430,7 +553,10 @@ with tab2:
 
     # --- SÉLECTEUR DE ZONE INTERACTIF ---
     if st.session_state["mode_carte_zone"]:
-        st.info("👆 **Clique n'importe où sur la carte** pour déplacer le centre de recherche, et ajuste la taille du cercle avec le curseur ci-dessous.")
+        lat_centre = float(st.session_state["reglages"]["zone_lat"])
+        lon_centre = float(st.session_state["reglages"]["zone_lon"])
+        nom_commune_clic, cps_clic = identifier_commune_gps(lat_centre, lon_centre)
+
         col_z1, col_z2 = st.columns([3, 1])
         with col_z1:
             rayon_km = st.slider(
@@ -445,10 +571,12 @@ with tab2:
                 sauvegarder_reglages_sur_disque({"zone_lat": 43.6667, "zone_lon": 4.0303})
                 st.rerun()
 
-        lat_centre = float(st.session_state["reglages"]["zone_lat"])
-        lon_centre = float(st.session_state["reglages"]["zone_lon"])
+        if nom_commune_clic:
+            st.info(f"📍 **Variable de zone active pour l'IA :** {nom_commune_clic} ({', '.join(cps_clic)}) — rayon de **{rayon_km} km**. Clique sur la carte pour déplacer ce point.")
+        else:
+            st.info(f"📍 **Variable de zone active pour l'IA :** Coordonnées ({lat_centre}, {lon_centre}) — rayon de **{rayon_km} km**. Clique sur la carte pour déplacer ce point.")
 
-        # Caméra placée au-dessus de l'Occitanie par défaut
+        # Caméra centrée sur la région au démarrage
         carte_zone = folium.Map(location=[43.65, 3.35], zoom_start=8)
 
         folium.Circle(
@@ -459,12 +587,12 @@ with tab2:
             fill=True,
             fill_color="#1f77b4",
             fill_opacity=0.2,
-            tooltip=f"Zone de recherche : {rayon_km} km autour de ce point"
+            tooltip=f"Zone active : {rayon_km} km"
         ).add_to(carte_zone)
 
         folium.Marker(
             location=[lat_centre, lon_centre],
-            tooltip=f"Centre sélectionné (rayon {rayon_km} km)",
+            tooltip=f"{nom_commune_clic or 'Centre'} (rayon {rayon_km} km)",
             icon=folium.Icon(color="red", icon="crosshairs", prefix="fa")
         ).add_to(carte_zone)
 
@@ -489,6 +617,9 @@ with tab2:
                 st.rerun()
     else:
         rayon_km = int(reg["rayon_km"])
+        villes_cp = identifier_communes_cp(codes_postaux)
+        if villes_cp:
+            st.caption(f"📍 **Variable de lieu détectée pour l'IA :** {', '.join(villes_cp[:6])} ({codes_postaux})")
 
     col_opt1, col_opt2, col_opt3 = st.columns([2, 2, 2])
     with col_opt1:
@@ -506,8 +637,9 @@ with tab2:
         limite = st.slider("Nombre de prospects à analyser :", 3, 12, 5)
 
     with st.expander("⚙️ Paramètres du prompt de prospection"):
+        st.caption("Variables automatiques disponibles dans tes consignes : `{lieu_cible}` (ville/zone choisie) et `{rayon_km}` (taille du cercle).")
         prosp_offre = st.text_input("Tes services d'imprimerie à mettre en avant :", value=reg["prosp_offre"])
-        prosp_consignes = st.text_area("Consignes d'interprétation pour l'IA :", value=reg["prosp_consignes"], height=120)
+        prosp_consignes = st.text_area("Consignes d'interprétation pour l'IA :", value=reg["prosp_consignes"], height=130)
 
         if st.button("💾 Enregistrer ces réglages Prospection"):
             sauvegarder_reglages_sur_disque({
@@ -522,6 +654,20 @@ with tab2:
         lat_actuelle = float(st.session_state["reglages"]["zone_lat"])
         lon_actuelle = float(st.session_state["reglages"]["zone_lon"])
 
+        # Construction dynamique de la variable de localisation pour le prompt IA
+        if st.session_state["mode_carte_zone"]:
+            nom_commune_actuelle, cps_actuels = identifier_commune_gps(lat_actuelle, lon_actuelle)
+            if nom_commune_actuelle:
+                lieu_cible = f"un rayon de {rayon_km} km autour de {nom_commune_actuelle} ({', '.join(cps_actuels)})"
+            else:
+                lieu_cible = f"un rayon de {rayon_km} km autour du point GPS ({lat_actuelle}, {lon_actuelle})"
+        else:
+            villes_actuelles = identifier_communes_cp(codes_postaux)
+            if villes_actuelles:
+                lieu_cible = f"le secteur de {', '.join(villes_actuelles[:5])} (code postal : {codes_postaux})"
+            else:
+                lieu_cible = f"le code postal {codes_postaux}"
+
         vivier = chercher_entreprises_pool(
             mode_zone=st.session_state["mode_carte_zone"],
             codes_postaux_str=codes_postaux,
@@ -534,21 +680,14 @@ with tab2:
         )
 
         if not vivier:
-            st.error("Aucune entreprise locale trouvée dans cette zone précise. Essaie d'agrandir un peu le rayon ou de vérifier le code postal.")
+            st.error(f"Aucune entreprise trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou de vérifier le code postal.")
         else:
             lignes_vivier = []
             for idx, ent in enumerate(vivier, start=1):
-                nom = ent.get("nom_complet", "Entreprise")
-                naf = ent.get("activite_principale", "Inconnu")
-                adresse = ent.get("siege", {}).get("adresse", "Adresse inconnue")
-                creation = str(ent.get("date_creation") or "Inconnue")[:4]
-                lignes_vivier.append(f"{idx}. Nom: {nom} | Code NAF: {naf} | Créée en: {creation} | Adresse: {adresse}")
-
-            zone_texte = (
-                f"un rayon de {rayon_km} km autour du point GPS ({lat_actuelle}, {lon_actuelle})"
-                if st.session_state["mode_carte_zone"]
-                else f"les codes postaux ({codes_postaux})"
-            )
+                dist_txt = f" | Distance: {ent['distance_km']} km" if ent.get("distance_km") is not None else ""
+                lignes_vivier.append(
+                    f"{idx}. Nom: {ent['nom']} | Code NAF: {ent['naf']} | Créée en: {ent['creation']} | Adresse locale: {ent['adresse']}{dist_txt}"
+                )
 
             objectif_texte = (
                 "TOUS TYPES D'ACTIVITÉS (choisis un mélange varié et pertinent de commerces, artisans et sociétés locales)"
@@ -556,9 +695,18 @@ with tab2:
                 else f"THÈME RECHERCHÉ : '{theme_recherche}' (interprète ce thème au sens large pour trouver les meilleures entreprises correspondantes)"
             )
 
+            # Injection des variables dynamiques dans les consignes de l'utilisateur
+            consignes_interpretees = (
+                prosp_consignes
+                .replace("{lieu_cible}", lieu_cible)
+                .replace("{rayon_km}", str(rayon_km))
+            )
+
             prompt_prospection = f"""Tu es le directeur commercial d'une entreprise spécialisée dans : {prosp_offre}.
 
-Voici une liste de {len(vivier)} vraies entreprises locales situées exclusivement dans {zone_texte} :
+CONTEXTE GÉOGRAPHIQUE DE LA RECHERCHE :
+L'utilisateur cible précisément : {lieu_cible}.
+Voici une liste de {len(vivier)} vraies entreprises ayant un établissement actif sur place :
 {chr(10).join(lignes_vivier)}
 
 MISSION :
@@ -566,7 +714,7 @@ MISSION :
 2. Indique leur numéro exact (`numero_entreprise` entre 1 et {len(vivier)}).
 3. Explique en 1 phrase simple ce que fait cette entreprise (`interpretation_activite`).
 4. Applique strictement ces consignes pour chaque entreprise retenue :
-{prosp_consignes}"""
+{consignes_interpretees}"""
 
             texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.9)
 
@@ -582,39 +730,32 @@ MISSION :
                         index_reel = item.numero_entreprise - 1
                         if 0 <= index_reel < len(vivier):
                             ent = vivier[index_reel]
-                            siege = ent.get("siege", {})
-                            nom_ent = ent.get("nom_complet", "Inconnu")
-                            adresse_ent = siege.get("adresse", "")
-                            creation_ent = str(ent.get("date_creation") or "")[:4]
-
-                            tableau.append({
-                                "Entreprise": nom_ent,
+                            ligne_tab = {
+                                "Entreprise": ent["nom"],
                                 "Activité détectée": item.interpretation_activite,
-                                "Créée en": creation_ent,
-                                "Adresse": adresse_ent,
+                                "Créée en": ent["creation"],
+                                "Adresse locale": ent["adresse"],
                                 "Note /10": item.note_pertinence,
                                 "Produit à proposer": item.produit_imprimerie,
                                 "Message LinkedIn": item.message_linkedin,
                                 "Objet Email": item.objet_email
-                            })
+                            }
+                            if ent.get("distance_km") is not None:
+                                ligne_tab["Distance"] = f"{ent['distance_km']} km"
+                            tableau.append(ligne_tab)
 
-                            lat = siege.get("latitude")
-                            lon = siege.get("longitude")
-                            if lat and lon:
-                                try:
-                                    marqueurs_carte.append({
-                                        "lat": float(lat),
-                                        "lon": float(lon),
-                                        "nom": nom_ent,
-                                        "adresse": adresse_ent,
-                                        "produit": item.produit_imprimerie,
-                                        "note": item.note_pertinence
-                                    })
-                                except ValueError:
-                                    pass
+                            if ent.get("lat") and ent.get("lon"):
+                                marqueurs_carte.append({
+                                    "lat": ent["lat"],
+                                    "lon": ent["lon"],
+                                    "nom": ent["nom"],
+                                    "adresse": ent["adresse"],
+                                    "produit": item.produit_imprimerie,
+                                    "note": item.note_pertinence
+                                })
 
                     if tableau:
-                        st.success(f"✅ {len(tableau)} prospects locaux sélectionnés et analysés sur mesure !")
+                        st.success(f"✅ {len(tableau)} prospects locaux analysés sur {lieu_cible} !")
                         st.dataframe(tableau, use_container_width=True)
 
                         # Export CSV pour Excel

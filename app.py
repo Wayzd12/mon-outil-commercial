@@ -45,7 +45,7 @@ REGLAGES_PAR_DEFAUT = {
     "p_corps": "Donne 3 conseils pratiques et actionnables liés à l'impression ou la signalétique. Pour chaque conseil, ajoute une ligne en gras '**Ce que ça change pour vous :**'.",
     "p_conclusion": "Termine par 2 lignes de conclusion positives et une question ouverte simple pour inciter les lecteurs à commenter.",
     "prosp_offre": "Impression petit et grand format : cartes de visite, flyers, brochures, menus, étiquettes, enseignes de façade, logos en relief, vitrophanie, panneaux de chantier, marquage véhicule",
-    "prosp_consignes": "1. Tiens compte de la localisation précise ({lieu_cible}) et de l'adresse exacte de chaque entreprise.\n2. Sélectionne en priorité les entreprises les plus pertinentes par rapport au thème demandé (en décodant leur code activité NAF et leur nom).\n3. Adapte le produit recommandé à l'emplacement (avenue/zone = grande enseigne ou panneau ; rue commerçante = vitrine, flyers ou menus ; artisan = panneaux de chantier et cartes de visite) et à l'année de création (récente = pack création ; ancienne = modernisation).\n4. Écris un message LinkedIn court (max 230 caractères), poli, ancré localement sur {lieu_cible} et jamais répétitif d'une ligne à l'autre.",
+    "prosp_consignes": "1. Tiens compte de la localisation précise ({lieu_cible}) et de l'adresse exacte de chaque entreprise.\n2. Sélectionne uniquement les entreprises qui ont un vrai rapport avec le thème demandé (en décodant leur code activité NAF et leur nom).\n3. Adapte le produit recommandé à l'emplacement (avenue/zone = grande enseigne ou panneau ; rue commerçante = vitrine, flyers ou menus ; artisan = panneaux de chantier et cartes de visite) et à l'année de création (récente = pack création ; ancienne = modernisation).\n4. Écris un message LinkedIn court (max 230 caractères), poli, ancré localement sur {lieu_cible} et jamais répétitif d'une ligne à l'autre.",
     "codes_postaux": "34670",
     "zone_lat": 43.6667,
     "zone_lon": 4.0303,
@@ -105,7 +105,7 @@ def _appel_unique_ia(modele: str, prompt: str, config_args: dict) -> str:
     )
     return response.text
 
-def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.9):
+def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.85):
     """Appelle toujours la vraie IA Google avec chronomètre de 20s max par essai."""
     modeles_actifs = ["gemini-3.5-flash-lite", "gemini-3.5-flash"]
     zone_statut = st.empty()
@@ -118,7 +118,7 @@ def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.9):
 
     for cycle in range(1, 4):
         for modele in list(modeles_actifs):
-            zone_statut.info(f"⏳ L'IA rédige sur mesure (essai {cycle}/3 — {modele})... 20 sec max.")
+            zone_statut.info(f"⏳ L'IA analyse et rédige sur mesure (essai {cycle}/3 — {modele})... 20 sec max.")
             executor = ThreadPoolExecutor(max_workers=1)
             futur = executor.submit(_appel_unique_ia, modele, prompt, config_args)
             try:
@@ -179,7 +179,7 @@ def collecter_actualites(rss_urls, max_articles=5):
 # --- 6. OUTILS GÉOGRAPHIQUES & PROSPECTION ---
 class ProspectSelectionne(BaseModel):
     numero_entreprise: int
-    note_pertinence: int = Field(ge=1, le=10, description="Note stricte sur 10, obligatoirement entre 1 et 10 (jamais sur 100)")
+    note_pertinence: int = Field(ge=1, le=10, description="Note stricte sur 10 (1 = aucun rapport avec le mot-clé, 10 = correspondance parfaite)")
     interpretation_activite: str
     produit_imprimerie: str
     message_linkedin: str
@@ -200,19 +200,19 @@ def calculer_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def identifier_commune_gps(lat: float, lon: float):
-    """Traduit un point GPS cliqué sur la carte en nom de commune et codes postaux."""
+    """Traduit un point GPS cliqué sur la carte en nom de commune, codes postaux et département."""
     try:
         rep = requests.get(
             "https://geo.api.gouv.fr/communes",
-            params={"lat": round(lat, 5), "lon": round(lon, 5), "fields": "nom,codesPostaux"},
+            params={"lat": round(lat, 5), "lon": round(lon, 5), "fields": "nom,codesPostaux,codeDepartement"},
             timeout=5
         )
         if rep.status_code == 200 and rep.json():
             commune = rep.json()[0]
-            return commune.get("nom", ""), commune.get("codesPostaux", [])
+            return commune.get("nom", ""), commune.get("codesPostaux", []), commune.get("codeDepartement", "")
     except Exception:
         pass
-    return "", []
+    return "", [], ""
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def identifier_communes_cp(codes_postaux_str: str):
@@ -234,6 +234,15 @@ def identifier_communes_cp(codes_postaux_str: str):
         except Exception:
             pass
     return villes
+
+def extraire_mots_cles_significatifs(mot_cle: str) -> list:
+    """Extrait les mots-clés utiles d'une expression (ex: 'commerces avec vitrine' -> ['commerces', 'vitrine'])."""
+    mots_vides = {
+        "avec", "sans", "pour", "dans", "les", "des", "une", "qui", "font",
+        "sur", "par", "aux", "type", "types", "entreprise", "entreprises", "societe", "societes"
+    }
+    nettoye = mot_cle.lower().replace(",", " ").replace(";", " ").replace("'", " ")
+    return [m.strip() for m in nettoye.split() if len(m.strip()) >= 3 and m.strip() not in mots_vides]
 
 def extraire_etablissement_local(ent: dict, mode_zone: bool, codes_cibles: list, zone_lat: float, zone_lon: float, rayon_km: int):
     """Vérifie les établissements locaux pour garder uniquement les entreprises situées sur place."""
@@ -296,9 +305,10 @@ def chercher_entreprises_pool(
     tous_types: bool,
     renouveler: bool
 ):
-    """Récupère un vivier fiable d'entreprises locales."""
+    """Récupère un vivier ciblé d'entreprises locales en rapport avec le mot-clé."""
     vivier_brut = {}
-    exclure_sci = not any(m in mot_cle.lower() for m in ["immobilier", "sci", "foncier", "location"])
+    mots_cles_list = [] if tous_types else extraire_mots_cles_significatifs(mot_cle)
+    exclure_sci = True if tous_types else (not any(m in mot_cle.lower() for m in ["immobilier", "sci", "foncier", "location"]))
 
     def ajouter_depuis_reponse(data_json, codes_cibles):
         for ent in data_json.get("results", []):
@@ -315,99 +325,110 @@ def chercher_entreprises_pool(
                 vivier_brut[siren] = info_locale
 
     if mode_zone:
-        url_geo = "https://recherche-entreprises.api.gouv.fr/near_point"
-        pages_a_tester = [random.randint(1, 3), 1] if renouveler else [1]
-        for p in dict.fromkeys(pages_a_tester):
-            params_geo = {
-                "lat": round(zone_lat, 5),
-                "long": round(zone_lon, 5),
-                "radius": rayon_km,
-                "per_page": 25,
-                "page": p
-            }
-            try:
-                rep = requests.get(url_geo, params=params_geo, timeout=10)
-                if rep.status_code == 200:
-                    json1 = rep.json()
-                    ajouter_depuis_reponse(json1, [])
-                    total_pages = int(json1.get("total_pages", 1))
-                    if renouveler and total_pages > 1:
-                        page_supp = random.randint(2, min(total_pages, 6))
-                        params_geo["page"] = page_supp
-                        rep2 = requests.get(url_geo, params=params_geo, timeout=10)
-                        if rep2.status_code == 200:
-                            ajouter_depuis_reponse(rep2.json(), [])
-            except Exception:
-                pass
-            if len(vivier_brut) >= 15:
-                break
+        _, cps_gps, code_dept = identifier_commune_gps(zone_lat, zone_lon)
 
-        if len(vivier_brut) < 6:
-            _, cps_gps = identifier_commune_gps(zone_lat, zone_lon)
-            if cps_gps:
-                for cp in cps_gps[:2]:
+        # 1. Si un mot-clé est renseigné, on cherche d'abord par mot-clé dans le département et on filtre dans le cercle GPS
+        if not tous_types and mots_cles_list and code_dept:
+            url_search = "https://recherche-entreprises.api.gouv.fr/search"
+            requetes_q = [mot_cle.strip()] if len(mots_cles_list) > 1 else []
+            requetes_q.extend(mots_cles_list)
+            for terme in dict.fromkeys(requetes_q):
+                for page_q in ([1, random.randint(2, 4)] if renouveler else [1, 2]):
                     try:
-                        rep_secours = requests.get(
-                            "https://recherche-entreprises.api.gouv.fr/search",
-                            params={"code_postal": cp, "etat_administratif": "A", "per_page": 25, "page": 1},
+                        rep_q = requests.get(
+                            url_search,
+                            params={
+                                "q": terme,
+                                "departement": code_dept,
+                                "etat_administratif": "A",
+                                "per_page": 25,
+                                "page": page_q
+                            },
                             timeout=8
                         )
-                        if rep_secours.status_code == 200:
-                            for ent in rep_secours.json().get("results", []):
-                                if ent.get("etat_administratif") != "A":
-                                    continue
-                                naf = str(ent.get("activite_principale") or "")
-                                if exclure_sci and naf.startswith("68.20"):
-                                    continue
-                                siren = ent.get("siren") or ent.get("nom_complet")
-                                if siren not in vivier_brut:
-                                    info_cp = extraire_etablissement_local(ent, False, cps_gps, zone_lat, zone_lon, rayon_km)
-                                    if info_cp:
-                                        vivier_brut[siren] = info_cp
+                        if rep_q.status_code == 200:
+                            ajouter_depuis_reponse(rep_q.json(), [])
                     except Exception:
                         pass
+                    if len(vivier_brut) >= 35:
+                        break
+                if len(vivier_brut) >= 35:
+                    break
+
+        # 2. On complète (ou on cherche si "Tous types d'activités") avec le radar GPS local /near_point
+        if tous_types or len(vivier_brut) < 15:
+            url_geo = "https://recherche-entreprises.api.gouv.fr/near_point"
+            pages_geo = [1, 2, random.randint(3, 5)] if renouveler else [1, 2, 3]
+            for p in dict.fromkeys(pages_geo):
+                try:
+                    rep = requests.get(
+                        url_geo,
+                        params={
+                            "lat": round(zone_lat, 5),
+                            "long": round(zone_lon, 5),
+                            "radius": rayon_km,
+                            "per_page": 25,
+                            "page": p
+                        },
+                        timeout=10
+                    )
+                    if rep.status_code == 200:
+                        ajouter_depuis_reponse(rep.json(), [])
+                except Exception:
+                    pass
+                if len(vivier_brut) >= 45:
+                    break
     else:
         codes = [c.strip() for c in codes_postaux_str.split(",") if c.strip()]
         url = "https://recherche-entreprises.api.gouv.fr/search"
-        mots = mot_cle.strip().split()
-        utiliser_q = (not tous_types) and (len(mots) == 1) and (len(mots[0]) >= 3)
 
         for cp in codes:
-            params = {
-                "code_postal": cp,
-                "etat_administratif": "A",
-                "per_page": 25,
-                "page": 1
-            }
-            if utiliser_q:
-                params["q"] = mots[0]
+            if not tous_types and mots_cles_list:
+                # 1. Recherche ciblée sur l'expression puis sur chaque mot-clé significatif
+                requetes_q = [mot_cle.strip()] if len(mots_cles_list) > 1 else []
+                requetes_q.extend(mots_cles_list)
+                for terme in dict.fromkeys(requetes_q):
+                    try:
+                        rep1 = requests.get(
+                            url,
+                            params={"q": terme, "code_postal": cp, "etat_administratif": "A", "per_page": 25, "page": 1},
+                            timeout=8
+                        )
+                        if rep1.status_code == 200:
+                            json1 = rep1.json()
+                            ajouter_depuis_reponse(json1, codes)
+                            total_pages = int(json1.get("total_pages", 1))
+                            if renouveler and total_pages > 1:
+                                rep2 = requests.get(
+                                    url,
+                                    params={
+                                        "q": terme,
+                                        "code_postal": cp,
+                                        "etat_administratif": "A",
+                                        "per_page": 25,
+                                        "page": random.randint(2, min(total_pages, 5))
+                                    },
+                                    timeout=8
+                                )
+                                if rep2.status_code == 200:
+                                    ajouter_depuis_reponse(rep2.json(), codes)
+                    except Exception:
+                        pass
 
-            try:
-                rep1 = requests.get(url, params=params, timeout=8)
-                if rep1.status_code == 200:
-                    json1 = rep1.json()
-                    ajouter_depuis_reponse(json1, codes)
-                    total_pages = int(json1.get("total_pages", 1))
-
-                    if renouveler and total_pages > 1:
-                        page_supp = random.randint(2, min(total_pages, 6))
-                        params["page"] = page_supp
-                        rep2 = requests.get(url, params=params, timeout=8)
-                        if rep2.status_code == 200:
-                            ajouter_depuis_reponse(rep2.json(), codes)
-
-                if len(vivier_brut) < 6 and "q" in params:
-                    params_larges = {
-                        "code_postal": cp,
-                        "etat_administratif": "A",
-                        "per_page": 25,
-                        "page": 1
-                    }
-                    rep_large = requests.get(url, params=params_larges, timeout=8)
-                    if rep_large.status_code == 200:
-                        ajouter_depuis_reponse(rep_large.json(), codes)
-            except Exception:
-                pass
+            # 2. Si "Tous types" OU si le mot-clé était une idée large (ex: "commerces avec vitrine"), on charge un large panel local
+            if tous_types or len(vivier_brut) < 8:
+                pages_larges = [1, 2] if not renouveler else [1, random.randint(2, 4)]
+                for p_large in dict.fromkeys(pages_larges):
+                    try:
+                        rep_large = requests.get(
+                            url,
+                            params={"code_postal": cp, "etat_administratif": "A", "per_page": 25, "page": p_large},
+                            timeout=8
+                        )
+                        if rep_large.status_code == 200:
+                            ajouter_depuis_reponse(rep_large.json(), codes)
+                    except Exception:
+                        pass
 
     liste_propre = list(vivier_brut.values())
     if renouveler:
@@ -415,7 +436,7 @@ def chercher_entreprises_pool(
     else:
         liste_propre.sort(key=lambda x: str(x.get("creation") or "0000"), reverse=True)
 
-    return liste_propre[:25]
+    return liste_propre[:40]
 
 # --- 7. BARRE DE SAUVEGARDE PERMANENTE DES RÉGLAGES ---
 with st.expander("💾 Sauvegarder ou restaurer mes réglages préférés"):
@@ -569,7 +590,7 @@ with tab2:
     if st.session_state["mode_carte_zone"]:
         lat_centre = float(st.session_state["reglages"]["zone_lat"])
         lon_centre = float(st.session_state["reglages"]["zone_lon"])
-        nom_commune_clic, cps_clic = identifier_commune_gps(lat_centre, lon_centre)
+        nom_commune_clic, cps_clic, _ = identifier_commune_gps(lat_centre, lon_centre)
 
         col_z1, col_z2 = st.columns([3, 1])
         with col_z1:
@@ -646,7 +667,7 @@ with tab2:
             value=True
         )
     with col_opt3:
-        limite = st.slider("Nombre de prospects à analyser :", 3, 12, 5)
+        limite = st.slider("Nombre maximum de prospects à afficher :", 3, 12, 5)
 
     with st.expander("⚙️ Paramètres du prompt de prospection"):
         st.caption("Variables automatiques disponibles dans tes consignes : `{lieu_cible}` (ville/zone choisie) et `{rayon_km}` (taille du cercle).")
@@ -667,7 +688,7 @@ with tab2:
         lon_actuelle = float(st.session_state["reglages"]["zone_lon"])
 
         if st.session_state["mode_carte_zone"]:
-            nom_commune_actuelle, cps_actuels = identifier_commune_gps(lat_actuelle, lon_actuelle)
+            nom_commune_actuelle, cps_actuels, _ = identifier_commune_gps(lat_actuelle, lon_actuelle)
             if nom_commune_actuelle:
                 lieu_cible = f"un rayon de {rayon_km} km autour de {nom_commune_actuelle} ({', '.join(cps_actuels)})"
             else:
@@ -700,11 +721,13 @@ with tab2:
                     f"{idx}. Nom: {ent['nom']} | Code NAF: {ent['naf']} | Créée en: {ent['creation']} | Adresse locale: {ent['adresse']}{dist_txt}"
                 )
 
-            objectif_texte = (
-                "TOUS TYPES D'ACTIVITÉS (choisis un mélange varié et pertinent de commerces, artisans et sociétés locales)"
-                if tous_types
-                else f"THÈME RECHERCHÉ : '{theme_recherche}' (interprète ce thème au sens large pour trouver les meilleures entreprises correspondantes)"
-            )
+            if tous_types:
+                regle_selection = f"""1. L'utilisateur a coché "TOUS TYPES D'ACTIVITÉS" : sélectionne jusqu'à {min(limite, len(vivier))} entreprises variées et pertinentes (commerces, artisans, sociétés locales) dans cette liste."""
+            else:
+                regle_selection = f"""1. RÈGLE STRICTE DE PERTINENCE : L'utilisateur recherche uniquement des entreprises ayant un rapport réel avec le mot-clé / thème : '{theme_recherche}'.
+   - Inspecte attentivement le nom et le code NAF de chaque entreprise.
+   - Ne retiens QUE celles qui ont un minimum de rapport avec '{theme_recherche}' (jusqu'à {min(limite, len(vivier))} maximum).
+   - INTERDICTION ABSOLUE de compléter la liste avec des entreprises hors-sujet ou prises au hasard pour atteindre {limite} résultats : s'il n'y a que 1, 2 ou 3 entreprises pertinentes, ne renvoie QUE celles-là. S'il n'y en a aucune, renvoie une liste vide `[]`."""
 
             consignes_interpretees = (
                 prosp_consignes
@@ -720,13 +743,13 @@ Voici une liste de {len(vivier)} vraies entreprises locales ayant un établissem
 {chr(10).join(lignes_vivier)}
 
 MISSION :
-1. Parmi cette liste, sélectionne exactement les {min(limite, len(vivier))} meilleures entreprises qui correspondent le mieux à : {objectif_texte}.
-2. Indique leur numéro exact (`numero_entreprise` entre 1 et {len(vivier)}).
+{regle_selection}
+2. Pour chaque entreprise retenue, indique son numéro exact (`numero_entreprise` entre 1 et {len(vivier)}).
 3. Explique en 1 phrase simple ce que fait cette entreprise (`interpretation_activite`).
-4. Donne une note stricte sur 10 (entre 1 et 10, jamais sur 100) et applique ces consignes :
+4. Donne une note stricte sur 10 (entre 1 et 10, jamais sur 100 — mets moins de 5 si le rapport avec '{theme_recherche}' est trop faible) et applique ces consignes :
 {consignes_interpretees}"""
 
-            texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.9)
+            texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.7)
 
             if not texte_json:
                 st.error(f"❌ L'IA n'a pas pu analyser les prospects. Détail : {erreur_ia}")
@@ -739,10 +762,14 @@ MISSION :
                     for item in donnees.resultats:
                         index_reel = item.numero_entreprise - 1
                         if 0 <= index_reel < len(vivier):
-                            ent = vivier[index_reel]
                             note_propre = round(item.note_pertinence / 10) if item.note_pertinence > 10 else item.note_pertinence
                             note_propre = max(1, min(10, note_propre))
 
+                            # Lorsque un mot-clé précis est demandé, on écarte toute entreprise jugée peu pertinente (< 5/10)
+                            if (not tous_types) and note_propre < 5:
+                                continue
+
+                            ent = vivier[index_reel]
                             ligne_tab = {
                                 "Entreprise": ent["nom"],
                                 "Activité détectée": item.interpretation_activite,
@@ -769,7 +796,11 @@ MISSION :
 
                     if tableau:
                         tableau.sort(key=lambda x: x["Note /10"], reverse=True)
-                        st.success(f"✅ {len(tableau)} prospects locaux analysés sur {lieu_cible} !")
+                        st.success(f"✅ {len(tableau)} prospect(s) pertinent(s) trouvé(s) sur {lieu_cible} !")
+
+                        if (not tous_types) and len(tableau) < limite:
+                            st.info(f"ℹ️ Seulement {len(tableau)} entreprise(s) correspondent réellement à « {theme_recherche} » dans cette zone (les entreprises sans rapport ont été écartées).")
+
                         st.dataframe(tableau, use_container_width=True)
 
                         # Export CSV pour Excel
@@ -829,6 +860,9 @@ MISSION :
                                 key="carte_resultats_prospects"
                             )
                     else:
-                        st.warning("L'IA a renvoyé des numéros hors liste. Clique à nouveau sur Rechercher.")
+                        if tous_types:
+                            st.warning("L'IA n'a retenu aucune entreprise sur cette tentative. Clique à nouveau sur Rechercher.")
+                        else:
+                            st.warning(f"Aucune entreprise en rapport avec « {theme_recherche} » n'a été trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou d'utiliser un mot-clé plus général.")
                 except Exception as e:
                     st.error(f"Erreur de lecture de la réponse IA : {e}")

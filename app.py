@@ -588,4 +588,243 @@ with tab2:
         if nom_commune_clic:
             st.info(f"📍 **Variable de zone active pour l'IA :** {nom_commune_clic} ({', '.join(cps_clic)}) — rayon de **{rayon_km} km**. Clique sur la carte pour déplacer ce point.")
         else:
-            st.info(f"📍 **Variable de zone active pour l'IA :** Co
+            st.info(f"📍 **Variable de zone active pour l'IA :** Coordonnées ({lat_centre}, {lon_centre}) — rayon de **{rayon_km} km**. Clique sur la carte pour déplacer ce point.")
+
+        carte_zone = folium.Map(location=[43.65, 3.35], zoom_start=8)
+
+        folium.Circle(
+            location=[lat_centre, lon_centre],
+            radius=rayon_km * 1000,
+            color="#1f77b4",
+            weight=2,
+            fill=True,
+            fill_color="#1f77b4",
+            fill_opacity=0.2,
+            tooltip=f"Zone active : {rayon_km} km"
+        ).add_to(carte_zone)
+
+        folium.Marker(
+            location=[lat_centre, lon_centre],
+            tooltip=f"{nom_commune_clic or 'Centre'} (rayon {rayon_km} km)",
+            icon=folium.Icon(color="red", icon="crosshairs", prefix="fa")
+        ).add_to(carte_zone)
+
+        retour_carte = st_folium(
+            carte_zone,
+            height=400,
+            use_container_width=True,
+            returned_objects=["last_clicked"],
+            key="selecteur_zone_carte"
+        )
+
+        if retour_carte and retour_carte.get("last_clicked"):
+            clic = retour_carte["last_clicked"]
+            nouveau_coord = (round(clic["lat"], 5), round(clic["lng"], 5))
+            if nouveau_coord != st.session_state["dernier_clic_carte"]:
+                st.session_state["dernier_clic_carte"] = nouveau_coord
+                sauvegarder_reglages_sur_disque({
+                    "zone_lat": nouveau_coord[0],
+                    "zone_lon": nouveau_coord[1],
+                    "rayon_km": rayon_km
+                })
+                st.rerun()
+    else:
+        rayon_km = int(reg["rayon_km"])
+        villes_cp = identifier_communes_cp(codes_postaux)
+        if villes_cp:
+            st.caption(f"📍 **Variable de lieu détectée pour l'IA :** {', '.join(villes_cp[:6])} ({codes_postaux})")
+
+    col_opt1, col_opt2, col_opt3 = st.columns([2, 2, 2])
+    with col_opt1:
+        tous_types = st.checkbox(
+            "🌐 Tous types d'activités",
+            key="check_tous_types"
+        )
+    with col_opt2:
+        renouveler = st.checkbox(
+            "🎲 Varier les entreprises à chaque recherche",
+            value=True
+        )
+    with col_opt3:
+        limite = st.slider("Nombre de prospects à analyser :", 3, 12, 5)
+
+    with st.expander("⚙️ Paramètres du prompt de prospection"):
+        st.caption("Variables automatiques disponibles dans tes consignes : `{lieu_cible}` (ville/zone choisie) et `{rayon_km}` (taille du cercle).")
+        prosp_offre = st.text_input("Tes services d'imprimerie à mettre en avant :", value=reg["prosp_offre"])
+        prosp_consignes = st.text_area("Consignes d'interprétation pour l'IA :", value=reg["prosp_consignes"], height=130)
+
+        if st.button("💾 Enregistrer ces réglages Prospection"):
+            sauvegarder_reglages_sur_disque({
+                "prosp_offre": prosp_offre,
+                "prosp_consignes": prosp_consignes,
+                "codes_postaux": codes_postaux,
+                "rayon_km": rayon_km
+            })
+            st.success("✅ Tes réglages Prospection sont enregistrés !")
+
+    if st.button("🔍 Rechercher, analyser et afficher sur la carte", type="primary"):
+        lat_actuelle = float(st.session_state["reglages"]["zone_lat"])
+        lon_actuelle = float(st.session_state["reglages"]["zone_lon"])
+
+        if st.session_state["mode_carte_zone"]:
+            nom_commune_actuelle, cps_actuels = identifier_commune_gps(lat_actuelle, lon_actuelle)
+            if nom_commune_actuelle:
+                lieu_cible = f"un rayon de {rayon_km} km autour de {nom_commune_actuelle} ({', '.join(cps_actuels)})"
+            else:
+                lieu_cible = f"un rayon de {rayon_km} km autour du point GPS ({lat_actuelle}, {lon_actuelle})"
+        else:
+            villes_actuelles = identifier_communes_cp(codes_postaux)
+            if villes_actuelles:
+                lieu_cible = f"le secteur de {', '.join(villes_actuelles[:5])} (code postal : {codes_postaux})"
+            else:
+                lieu_cible = f"le code postal {codes_postaux}"
+
+        vivier = chercher_entreprises_pool(
+            mode_zone=st.session_state["mode_carte_zone"],
+            codes_postaux_str=codes_postaux,
+            zone_lat=lat_actuelle,
+            zone_lon=lon_actuelle,
+            rayon_km=rayon_km,
+            mot_cle=theme_recherche,
+            tous_types=tous_types,
+            renouveler=renouveler
+        )
+
+        if not vivier:
+            st.error(f"Aucune entreprise trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou de vérifier le code postal.")
+        else:
+            lignes_vivier = []
+            for idx, ent in enumerate(vivier, start=1):
+                dist_txt = f" | Distance: {ent['distance_km']} km" if ent.get("distance_km") is not None else ""
+                lignes_vivier.append(
+                    f"{idx}. Nom: {ent['nom']} | Code NAF: {ent['naf']} | Créée en: {ent['creation']} | Adresse locale: {ent['adresse']}{dist_txt}"
+                )
+
+            objectif_texte = (
+                "TOUS TYPES D'ACTIVITÉS (choisis un mélange varié et pertinent de commerces, artisans et sociétés locales)"
+                if tous_types
+                else f"THÈME RECHERCHÉ : '{theme_recherche}' (interprète ce thème au sens large pour trouver les meilleures entreprises correspondantes)"
+            )
+
+            consignes_interpretees = (
+                prosp_consignes
+                .replace("{lieu_cible}", lieu_cible)
+                .replace("{rayon_km}", str(rayon_km))
+            )
+
+            prompt_prospection = f"""Tu es le directeur commercial d'une entreprise spécialisée dans : {prosp_offre}.
+
+CONTEXTE GÉOGRAPHIQUE DE LA RECHERCHE :
+L'utilisateur cible précisément : {lieu_cible}.
+Voici une liste de {len(vivier)} vraies entreprises locales ayant un établissement actif sur place :
+{chr(10).join(lignes_vivier)}
+
+MISSION :
+1. Parmi cette liste, sélectionne exactement les {min(limite, len(vivier))} meilleures entreprises qui correspondent le mieux à : {objectif_texte}.
+2. Indique leur numéro exact (`numero_entreprise` entre 1 et {len(vivier)}).
+3. Explique en 1 phrase simple ce que fait cette entreprise (`interpretation_activite`).
+4. Applique strictement ces consignes pour chaque entreprise retenue :
+{consignes_interpretees}"""
+
+            texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.9)
+
+            if not texte_json:
+                st.error(f"❌ L'IA n'a pas pu analyser les prospects. Détail : {erreur_ia}")
+            else:
+                try:
+                    donnees = ListeAnalyses.model_validate_json(texte_json)
+                    tableau = []
+                    marqueurs_carte = []
+
+                    for item in donnees.resultats:
+                        index_reel = item.numero_entreprise - 1
+                        if 0 <= index_reel < len(vivier):
+                            ent = vivier[index_reel]
+                            ligne_tab = {
+                                "Entreprise": ent["nom"],
+                                "Activité détectée": item.interpretation_activite,
+                                "Créée en": ent["creation"],
+                                "Adresse locale": ent["adresse"],
+                                "Note /10": item.note_pertinence,
+                                "Produit à proposer": item.produit_imprimerie,
+                                "Message LinkedIn": item.message_linkedin,
+                                "Objet Email": item.objet_email
+                            }
+                            if ent.get("distance_km") is not None:
+                                ligne_tab["Distance"] = f"{ent['distance_km']} km"
+                            tableau.append(ligne_tab)
+
+                            if ent.get("lat") and ent.get("lon"):
+                                marqueurs_carte.append({
+                                    "lat": ent["lat"],
+                                    "lon": ent["lon"],
+                                    "nom": ent["nom"],
+                                    "adresse": ent["adresse"],
+                                    "produit": item.produit_imprimerie,
+                                    "note": item.note_pertinence
+                                })
+
+                    if tableau:
+                        st.success(f"✅ {len(tableau)} prospects locaux analysés sur {lieu_cible} !")
+                        st.dataframe(tableau, use_container_width=True)
+
+                        # Export CSV pour Excel
+                        buffer_csv = io.StringIO()
+                        writer = csv.DictWriter(buffer_csv, fieldnames=tableau[0].keys(), delimiter=";")
+                        writer.writeheader()
+                        writer.writerows(tableau)
+                        st.download_button(
+                            label="📥 Télécharger ce tableau pour Excel (.csv)",
+                            data=buffer_csv.getvalue().encode("utf-8-sig"),
+                            file_name="prospection_imprimerie.csv",
+                            mime="text/csv"
+                        )
+
+                        # Carte des résultats avec les NOMS figés juste au-dessus des points
+                        if marqueurs_carte:
+                            st.subheader("🗺️ Localisation et noms des prospects trouvés")
+                            centre_lat = sum(m["lat"] for m in marqueurs_carte) / len(marqueurs_carte)
+                            centre_lon = sum(m["lon"] for m in marqueurs_carte) / len(marqueurs_carte)
+
+                            carte_resultats = folium.Map(location=[centre_lat, centre_lon], zoom_start=12)
+
+                            if st.session_state["mode_carte_zone"]:
+                                folium.Circle(
+                                    location=[lat_actuelle, lon_actuelle],
+                                    radius=rayon_km * 1000,
+                                    color="#1f77b4",
+                                    weight=1,
+                                    fill=True,
+                                    fill_opacity=0.08
+                                ).add_to(carte_resultats)
+
+                            for m in marqueurs_carte:
+                                fiche_html = (
+                                    f"<b>{m['nom']}</b> (Note : {m['note']}/10)<br>"
+                                    f"<i>{m['adresse']}</i><br><br>"
+                                    f"<b>Idée :</b> {m['produit']}"
+                                )
+                                folium.Marker(
+                                    location=[m["lat"], m["lon"]],
+                                    popup=folium.Popup(fiche_html, max_width=280),
+                                    tooltip=folium.Tooltip(
+                                        f"<b>{m['nom']}</b>",
+                                        permanent=True,
+                                        direction="top",
+                                        sticky=False,
+                                        offset=(0, -36)
+                                    ),
+                                    icon=folium.Icon(color="green", icon="briefcase", prefix="fa")
+                                ).add_to(carte_resultats)
+
+                            st_folium(
+                                carte_resultats,
+                                height=460,
+                                use_container_width=True,
+                                returned_objects=[],
+                                key="carte_resultats_prospects"
+                            )
+                    else:
+                        st.warning("L'IA a renvoyé des numéros hors liste. Clique à nouveau sur Rechercher.")
+                except Exception as e:
+                    st.error(f"Erreur de lecture de la réponse IA : {e}")

@@ -13,7 +13,7 @@ from streamlit_folium import st_folium
 from concurrent.futures import ThreadPoolExecutor
 from google import genai
 from google.genai import types
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # 1. CONFIGURATION DE LA PAGE
 st.set_page_config(page_title="Tableau de Bord Imprimerie", page_icon="🖨️", layout="wide")
@@ -179,7 +179,7 @@ def collecter_actualites(rss_urls, max_articles=5):
 # --- 6. OUTILS GÉOGRAPHIQUES & PROSPECTION ---
 class ProspectSelectionne(BaseModel):
     numero_entreprise: int
-    note_pertinence: int
+    note_pertinence: int = Field(ge=1, le=10, description="Note stricte sur 10, obligatoirement entre 1 et 10 (jamais sur 100)")
     interpretation_activite: str
     produit_imprimerie: str
     message_linkedin: str
@@ -723,7 +723,7 @@ MISSION :
 1. Parmi cette liste, sélectionne exactement les {min(limite, len(vivier))} meilleures entreprises qui correspondent le mieux à : {objectif_texte}.
 2. Indique leur numéro exact (`numero_entreprise` entre 1 et {len(vivier)}).
 3. Explique en 1 phrase simple ce que fait cette entreprise (`interpretation_activite`).
-4. Applique strictement ces consignes pour chaque entreprise retenue :
+4. Donne une note stricte sur 10 (entre 1 et 10, jamais sur 100) et applique ces consignes :
 {consignes_interpretees}"""
 
             texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.9)
@@ -740,12 +740,15 @@ MISSION :
                         index_reel = item.numero_entreprise - 1
                         if 0 <= index_reel < len(vivier):
                             ent = vivier[index_reel]
+                            note_propre = round(item.note_pertinence / 10) if item.note_pertinence > 10 else item.note_pertinence
+                            note_propre = max(1, min(10, note_propre))
+
                             ligne_tab = {
                                 "Entreprise": ent["nom"],
                                 "Activité détectée": item.interpretation_activite,
                                 "Créée en": ent["creation"],
                                 "Adresse locale": ent["adresse"],
-                                "Note /10": item.note_pertinence,
+                                "Note /10": note_propre,
                                 "Produit à proposer": item.produit_imprimerie,
                                 "Message LinkedIn": item.message_linkedin,
                                 "Objet Email": item.objet_email
@@ -761,10 +764,11 @@ MISSION :
                                     "nom": ent["nom"],
                                     "adresse": ent["adresse"],
                                     "produit": item.produit_imprimerie,
-                                    "note": item.note_pertinence
+                                    "note": note_propre
                                 })
 
                     if tableau:
+                        tableau.sort(key=lambda x: x["Note /10"], reverse=True)
                         st.success(f"✅ {len(tableau)} prospects locaux analysés sur {lieu_cible} !")
                         st.dataframe(tableau, use_container_width=True)
 

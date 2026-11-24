@@ -1,11 +1,14 @@
 import streamlit as st
 import os
+import json
 import time
 import random
 import io
 import csv
 import requests
 import feedparser
+import folium
+from streamlit_folium import st_folium
 from concurrent.futures import ThreadPoolExecutor
 from google import genai
 from google.genai import types
@@ -31,7 +34,52 @@ if not st.session_state["connecte"]:
             st.error("Mot de passe incorrect.")
     st.stop()
 
-# --- 3. CONNEXION À L'IA GOOGLE ---
+# --- 3. GESTION DES RÉGLAGES SAUVEGARDÉS ---
+FICHIER_REGLAGES = "mes_reglages_imprimerie.json"
+
+REGLAGES_PAR_DEFAUT = {
+    "p_identite": "Imprimerie moderne (cartes de visite, flyers, brochures, menus, affiches, enseignes de façade, logos sur bâtiment, vitrophanie, panneaux de chantier)",
+    "p_style": "Chaleureux, concret, direct, comme un artisan-conseil local qui parle simplement sans jargon",
+    "p_intro": "Commence par un titre accrocheur (moins de 65 caractères), puis une introduction de 3 lignes maximum qui part d'une situation vécue par les commerçants ou artisans locaux.",
+    "p_corps": "Donne 3 conseils pratiques et actionnables liés à l'impression ou la signalétique. Pour chaque conseil, ajoute une ligne en gras '**Ce que ça change pour vous :**'.",
+    "p_conclusion": "Termine par 2 lignes de conclusion positives et une question ouverte simple pour inciter les lecteurs à commenter.",
+    "prosp_offre": "Impression petit et grand format : cartes de visite, flyers, brochures, menus, étiquettes, enseignes de façade, logos en relief, vitrophanie, panneaux de chantier, marquage véhicule",
+    "prosp_consignes": "1. Sélectionne en priorité les entreprises les plus pertinentes par rapport au thème demandé (en décodant leur code activité NAF et leur nom).\n2. Adapte le produit recommandé à l'adresse (avenue/zone = grande enseigne ou panneau ; rue commerçante = vitrine, flyers ou menus ; artisan = panneaux de chantier et cartes de visite) et à l'année de création (récente = pack création ; ancienne = modernisation).\n3. Écris un message LinkedIn court (max 230 caractères), poli, local et jamais répétitif d'une ligne à l'autre.",
+    "codes_postaux": "34670, 34740, 34130",
+    "zone_lat": 43.6667,  # Saint-Brès (Occitanie)
+    "zone_lon": 4.0303,
+    "rayon_km": 10
+}
+
+def charger_reglages():
+    donnees = REGLAGES_PAR_DEFAUT.copy()
+    if os.path.exists(FICHIER_REGLAGES):
+        try:
+            with open(FICHIER_REGLAGES, "r", encoding="utf-8") as f:
+                sauvegarde = json.load(f)
+                donnees.update(sauvegarde)
+        except Exception:
+            pass
+    return donnees
+
+def sauvegarder_reglages_sur_disque(nouveaux_reglages: dict):
+    st.session_state["reglages"].update(nouveaux_reglages)
+    try:
+        with open(FICHIER_REGLAGES, "w", encoding="utf-8") as f:
+            json.dump(st.session_state["reglages"], f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+if "reglages" not in st.session_state:
+    st.session_state["reglages"] = charger_reglages()
+
+if "mode_carte_zone" not in st.session_state:
+    st.session_state["mode_carte_zone"] = False
+
+if "dernier_clic_carte" not in st.session_state:
+    st.session_state["dernier_clic_carte"] = None
+
+# --- 4. CONNEXION À L'IA GOOGLE ---
 st.title("🖨️ Tableau de Bord — Imprimerie & Enseignes")
 
 try:
@@ -54,8 +102,8 @@ def _appel_unique_ia(modele: str, prompt: str, config_args: dict) -> str:
     return response.text
 
 def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.9):
-    """Appelle la vraie IA Google avec chronomètre de 20s max par essai (aucun texte préfait)."""
-    modeles_actifs = ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
+    """Appelle toujours la vraie IA Google avec chronomètre de 20s max par essai."""
+    modeles_actifs = ["gemini-3.5-flash-lite", "gemini-3.5-flash"]
     zone_statut = st.empty()
     derniere_erreur = ""
 
@@ -89,13 +137,13 @@ def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.9):
             break
 
         pause = cycle * 3
-        zone_statut.warning(f"🚦 Serveurs Google occupés ({derniere_erreur[:80]}). Nouvel essai dans {pause}s...")
+        zone_statut.warning(f"🚦 Serveurs Google occupés. Nouvel essai dans {pause}s...")
         time.sleep(pause)
 
     zone_statut.empty()
     return None, derniere_erreur
 
-# --- 4. OUTILS POUR LA NEWSLETTER ---
+# --- 5. OUTILS POUR LA NEWSLETTER ---
 THEMES_IMPRIMERIE = [
     "Les cartes de visite : pourquoi un papier épais ou un vernis marque les esprits face aux cartes banales",
     "Les enseignes de façade et logos en relief : la règle des 3 secondes pour être vu par les passants",
@@ -124,7 +172,7 @@ def collecter_actualites(rss_urls, max_articles=5):
             pass
     return articles
 
-# --- 5. OUTILS POUR LA PROSPECTION ---
+# --- 6. OUTILS POUR LA PROSPECTION ---
 class ProspectSelectionne(BaseModel):
     numero_entreprise: int
     note_pertinence: int
@@ -136,43 +184,77 @@ class ProspectSelectionne(BaseModel):
 class ListeAnalyses(BaseModel):
     resultats: list[ProspectSelectionne]
 
-def chercher_entreprises_pool(codes_postaux_str: str, mot_cle: str, tous_types: bool, renouveler: bool):
-    codes = [c.strip() for c in codes_postaux_str.split(",") if c.strip()]
+def chercher_entreprises_pool(
+    mode_zone: bool,
+    codes_postaux_str: str,
+    zone_lat: float,
+    zone_lon: float,
+    rayon_km: int,
+    mot_cle: str,
+    tous_types: bool,
+    renouveler: bool
+):
     toutes_entreprises = []
-    url = "https://recherche-entreprises.api.gouv.fr/search"
 
-    for cp in codes:
+    if mode_zone:
+        # Recherche géographique par point GPS et rayon (km) en Occitanie
+        url_geo = "https://recherche-entreprises.api.gouv.fr/near_point"
         page_api = random.randint(1, 3) if renouveler else 1
-        params = {
-            "code_postal": cp,
-            "etat_administratif": "A",
+        params_geo = {
+            "lat": round(zone_lat, 5),
+            "long": round(zone_lon, 5),
+            "radius": rayon_km,
             "per_page": 25,
             "page": page_api
         }
-        mots = mot_cle.strip().split()
-        if not tous_types and len(mots) == 1:
-            params["q"] = mot_cle.strip()
-
         try:
-            rep = requests.get(url, params=params, timeout=8)
+            rep = requests.get(url_geo, params=params_geo, timeout=10)
             rep.raise_for_status()
             res = rep.json().get("results", [])
-
-            if len(res) < 5:
-                params_larges = {
-                    "code_postal": cp,
-                    "etat_administratif": "A",
-                    "per_page": 25,
-                    "page": 1
-                }
-                rep2 = requests.get(url, params=params_larges, timeout=8)
+            if len(res) < 5 and page_api > 1:
+                params_geo["page"] = 1
+                rep2 = requests.get(url_geo, params=params_geo, timeout=10)
                 if rep2.status_code == 200:
                     res.extend(rep2.json().get("results", []))
-
-            toutes_entreprises.extend(res)
+            # On garde uniquement les entreprises encore en activité ("A")
+            toutes_entreprises = [e for e in res if e.get("etat_administratif") == "A"]
         except Exception:
             pass
+    else:
+        # Recherche classique par code(s) postal(aux)
+        codes = [c.strip() for c in codes_postaux_str.split(",") if c.strip()]
+        url = "https://recherche-entreprises.api.gouv.fr/search"
+        for cp in codes:
+            page_api = random.randint(1, 3) if renouveler else 1
+            params = {
+                "code_postal": cp,
+                "etat_administratif": "A",
+                "per_page": 25,
+                "page": page_api
+            }
+            mots = mot_cle.strip().split()
+            if not tous_types and len(mots) == 1:
+                params["q"] = mot_cle.strip()
 
+            try:
+                rep = requests.get(url, params=params, timeout=8)
+                rep.raise_for_status()
+                res = rep.json().get("results", [])
+                if len(res) < 5:
+                    params_larges = {
+                        "code_postal": cp,
+                        "etat_administratif": "A",
+                        "per_page": 25,
+                        "page": 1
+                    }
+                    rep2 = requests.get(url, params=params_larges, timeout=8)
+                    if rep2.status_code == 200:
+                        res.extend(rep2.json().get("results", []))
+                toutes_entreprises.extend(res)
+            except Exception:
+                pass
+
+    # Suppression des doublons par SIREN
     uniques = {}
     for ent in toutes_entreprises:
         siren = ent.get("siren") or ent.get("nom_complet")
@@ -186,7 +268,28 @@ def chercher_entreprises_pool(codes_postaux_str: str, mot_cle: str, tous_types: 
 
     return liste_propre[:25]
 
-# --- 6. INTERFACE DU SITE ---
+# --- 7. BARRE DE SAUVEGARDE PERMANENTE DES RÉGLAGES ---
+with st.expander("💾 Sauvegarder ou restaurer mes réglages préférés"):
+    st.caption("Tes réglages sont mémorisés dès que tu cliques sur Enregistrer. Télécharge aussi le petit fichier de secours pour pouvoir les recharger en 1 clic si le site se met en veille.")
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        st.download_button(
+            label="📥 Télécharger ma sauvegarde (.json)",
+            data=json.dumps(st.session_state["reglages"], ensure_ascii=False, indent=2).encode("utf-8"),
+            file_name="mes_reglages_imprimerie.json",
+            mime="application/json"
+        )
+    with col_s2:
+        fichier_importe = st.file_uploader("📤 Restaurer une sauvegarde (.json)", type=["json"], label_visibility="collapsed")
+        if fichier_importe is not None:
+            try:
+                contenu = json.load(fichier_importe)
+                sauvegarder_reglages_sur_disque(contenu)
+                st.success("✅ Réglages restaurés avec succès !")
+            except Exception:
+                st.error("Fichier invalide.")
+
+# --- 8. INTERFACE DU SITE (2 ONGLETS) ---
 tab1, tab2 = st.tabs(["📝 Ma Newsletter LinkedIn", "🎯 Prospection & Carte Locale"])
 
 # ==============================================================================
@@ -207,35 +310,29 @@ with tab1:
             placeholder="Ex: cartes de visite dorées, panneaux de chantier maçon, vitrine Noël..."
         )
 
-    with st.expander("⚙️ Paramètres du prompt (Introduction, Style, Corps, Conclusion)"):
-        st.caption("Modifie ces réglages pour changer la façon dont l'IA écrit ta newsletter :")
+    reg = st.session_state["reglages"]
 
-        p_identite = st.text_input(
-            "Ton entreprise & tes produits :",
-            value="Imprimerie moderne (cartes de visite, flyers, brochures, menus, affiches, enseignes de façade, logos sur bâtiment, vitrophanie, panneaux de chantier)"
-        )
+    with st.expander("⚙️ Paramètres du prompt (Introduction, Style, Corps, Conclusion)"):
+        st.caption("Modifie ces réglages puis clique sur 'Enregistrer mes réglages' pour les garder :")
+
+        p_identite = st.text_input("Ton entreprise & tes produits :", value=reg["p_identite"])
         col_p1, col_p2 = st.columns(2)
         with col_p1:
-            p_style = st.text_input(
-                "Style et ton d'écriture :",
-                value="Chaleureux, concret, direct, comme un artisan-conseil local qui parle simplement sans jargon"
-            )
-            p_intro = st.text_area(
-                "Consigne pour l'Introduction :",
-                value="Commence par un titre accrocheur (moins de 65 caractères), puis une introduction de 3 lignes maximum qui part d'une situation vécue par les commerçants ou artisans locaux.",
-                height=100
-            )
+            p_style = st.text_input("Style et ton d'écriture :", value=reg["p_style"])
+            p_intro = st.text_area("Consigne pour l'Introduction :", value=reg["p_intro"], height=100)
         with col_p2:
-            p_corps = st.text_area(
-                "Consigne pour le Corps (les conseils) :",
-                value="Donne 3 conseils pratiques et actionnables liés à l'impression ou la signalétique. Pour chaque conseil, ajoute une ligne en gras '**Ce que ça change pour vous :**'.",
-                height=100
-            )
-            p_conclusion = st.text_area(
-                "Consigne pour la Conclusion :",
-                value="Termine par 2 lignes de conclusion positives et une question ouverte simple pour inciter les lecteurs à commenter.",
-                height=100
-            )
+            p_corps = st.text_area("Consigne pour le Corps (les conseils) :", value=reg["p_corps"], height=100)
+            p_conclusion = st.text_area("Consigne pour la Conclusion :", value=reg["p_conclusion"], height=100)
+
+        if st.button("💾 Enregistrer ces réglages Newsletter"):
+            sauvegarder_reglages_sur_disque({
+                "p_identite": p_identite,
+                "p_style": p_style,
+                "p_intro": p_intro,
+                "p_corps": p_corps,
+                "p_conclusion": p_conclusion
+            })
+            st.success("✅ Tes réglages Newsletter sont enregistrés !")
 
     if st.button("✨ Générer ma newsletter sur mesure", type="primary"):
         actus = collecter_actualites(["https://www.bpifrance.fr/rss.xml"])
@@ -271,53 +368,151 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
             st.error(f"❌ L'IA n'a pas pu répondre. Détail : {erreur}")
 
 # ==============================================================================
-# ONGLET 2 : PROSPECTION INTELLIGENTE & MINI-CARTE
+# ONGLET 2 : PROSPECTION INTELLIGENTE & CARTE OCCITANIE
 # ==============================================================================
 with tab2:
-    st.header("Trouver des prospects selon un thème ou tous types d'activités")
+    st.header("Trouver des prospects par code postal ou sur la carte d'Occitanie")
 
-    col1, col2 = st.columns([2, 2])
-    with col1:
+    col_loc, col_btn_carte, col_act = st.columns([2, 1.3, 2.2])
+
+    with col_loc:
         codes_postaux = st.text_input(
             "Code(s) postal(aux) :",
-            value="34670, 34740, 34130",
-            help="Sépare plusieurs codes postaux par une virgule (ex: Saint-Brès, Vendargues, Mauguio)"
+            value=reg["codes_postaux"],
+            disabled=st.session_state["mode_carte_zone"],
+            help="Désactivé lorsque le mode carte Occitanie est ouvert."
         )
-        tous_types = st.checkbox(
-            "🌐 Tous types d'activités (ne pas se limiter à un seul métier)",
-            value=False
+
+    with col_btn_carte:
+        st.write("")  # Alignement vertical avec la case texte
+        st.write("")
+        label_bouton_carte = (
+            "❌ Revenir aux codes postaux"
+            if st.session_state["mode_carte_zone"]
+            else "🗺️ Zone sur carte (Occitanie)"
         )
-    with col2:
+        if st.button(label_bouton_carte, use_container_width=True):
+            st.session_state["mode_carte_zone"] = not st.session_state["mode_carte_zone"]
+            st.rerun()
+
+    with col_act:
         theme_recherche = st.text_input(
-            "Thème ou mot-clé à faire interpréter par l'IA :",
+            "Thème ou mot-clé à interpréter par l'IA :",
             value="commerces avec vitrine ou restaurants",
-            disabled=tous_types,
-            help="Tu peux mettre un métier précis (ex: boulangerie) OU un thème large (ex: artisans qui font des chantiers, jeunes entreprises, agences...)"
+            disabled=st.session_state.get("check_tous_types", False),
+            help="Ex: boulangerie, artisans de chantier, jeunes entreprises, agences..."
         )
+
+    # --- SÉLECTEUR DE ZONE INTERACTIF AU-DESSUS DE L'OCCITANIE ---
+    if st.session_state["mode_carte_zone"]:
+        st.info("👆 **Clique n'importe où sur la carte de l'Occitanie** pour déplacer le centre de recherche, et ajuste la taille du cercle avec le curseur ci-dessous.")
+        col_z1, col_z2 = st.columns([3, 1])
+        with col_z1:
+            rayon_km = st.slider(
+                "📏 Taille de la zone de recherche (rayon en km) :",
+                min_value=1,
+                max_value=50,
+                value=int(reg["rayon_km"])
+            )
+        with col_z2:
+            st.write("")
+            if st.button("📍 Recentrer sur Saint-Brès"):
+                sauvegarder_reglages_sur_disque({"zone_lat": 43.6667, "zone_lon": 4.0303})
+                st.rerun()
+
+        lat_centre = float(st.session_state["reglages"]["zone_lat"])
+        lon_centre = float(st.session_state["reglages"]["zone_lon"])
+
+        # Création de la carte centrée sur l'Occitanie
+        carte_occitanie = folium.Map(location=[43.65, 3.35], zoom_start=8)
+
+        # Cercle bleu représentant la zone exacte de recherche
+        folium.Circle(
+            location=[lat_centre, lon_centre],
+            radius=rayon_km * 1000,
+            color="#1f77b4",
+            weight=2,
+            fill=True,
+            fill_color="#1f77b4",
+            fill_opacity=0.2,
+            tooltip=f"Zone de recherche : {rayon_km} km autour de ce point"
+        ).add_to(carte_occitanie)
+
+        # Marqueur central
+        folium.Marker(
+            location=[lat_centre, lon_centre],
+            tooltip=f"Centre sélectionné (rayon {rayon_km} km)",
+            icon=folium.Icon(color="red", icon="crosshairs", prefix="fa")
+        ).add_to(carte_occitanie)
+
+        retour_carte = st_folium(
+            carte_occitanie,
+            height=400,
+            use_container_width=True,
+            returned_objects=["last_clicked"],
+            key="selecteur_occitanie"
+        )
+
+        # Détection d'un clic sur la carte pour déplacer le cercle
+        if retour_carte and retour_carte.get("last_clicked"):
+            clic = retour_carte["last_clicked"]
+            nouveau_coord = (round(clic["lat"], 5), round(clic["lng"], 5))
+            if nouveau_coord != st.session_state["dernier_clic_carte"]:
+                st.session_state["dernier_clic_carte"] = nouveau_coord
+                sauvegarder_reglages_sur_disque({
+                    "zone_lat": nouveau_coord[0],
+                    "zone_lon": nouveau_coord[1],
+                    "rayon_km": rayon_km
+                })
+                st.rerun()
+    else:
+        rayon_km = int(reg["rayon_km"])
+
+    col_opt1, col_opt2, col_opt3 = st.columns([2, 2, 2])
+    with col_opt1:
+        tous_types = st.checkbox(
+            "🌐 Tous types d'activités",
+            value=False,
+            key="check_tous_types"
+        )
+    with col_opt2:
         renouveler = st.checkbox(
-            "🎲 Varier les entreprises à chaque recherche (sinon : les plus récentes en premier)",
+            "🎲 Varier les entreprises à chaque recherche",
             value=True
         )
-
-    limite = st.slider("Nombre de prospects à retenir et analyser :", 3, 12, 5)
+    with col_opt3:
+        limite = st.slider("Nombre de prospects à analyser :", 3, 12, 5)
 
     with st.expander("⚙️ Paramètres du prompt de prospection"):
-        st.caption("Ajuste les critères utilisés par l'IA pour sélectionner et démarcher tes prospects :")
-        prosp_offre = st.text_input(
-            "Tes services d'imprimerie à mettre en avant :",
-            value="Impression petit et grand format : cartes de visite, flyers, brochures, menus, étiquettes, enseignes de façade, logos en relief, vitrophanie, panneaux de chantier, marquage véhicule"
-        )
-        prosp_consignes = st.text_area(
-            "Consignes d'interprétation pour l'IA :",
-            value="1. Sélectionne en priorité les entreprises les plus pertinentes par rapport au thème demandé (en décodant leur code activité NAF et leur nom).\n2. Adapte le produit recommandé à l'adresse (avenue/zone = grande enseigne ou panneau ; rue commerçante = vitrine, flyers ou menus ; artisan = panneaux de chantier et cartes de visite) et à l'année de création (récente = pack création ; ancienne = modernisation).\n3. Écris un message LinkedIn court (max 230 caractères), poli, local et jamais répétitif d'une ligne à l'autre.",
-            height=120
-        )
+        prosp_offre = st.text_input("Tes services d'imprimerie à mettre en avant :", value=reg["prosp_offre"])
+        prosp_consignes = st.text_area("Consignes d'interprétation pour l'IA :", value=reg["prosp_consignes"], height=120)
+
+        if st.button("💾 Enregistrer ces réglages Prospection"):
+            sauvegarder_reglages_sur_disque({
+                "prosp_offre": prosp_offre,
+                "prosp_consignes": prosp_consignes,
+                "codes_postaux": codes_postaux,
+                "rayon_km": rayon_km
+            })
+            st.success("✅ Tes réglages Prospection sont enregistrés !")
 
     if st.button("🔍 Rechercher, analyser et afficher sur la carte", type="primary"):
-        vivier = chercher_entreprises_pool(codes_postaux, theme_recherche, tous_types, renouveler)
+        lat_actuelle = float(st.session_state["reglages"]["zone_lat"])
+        lon_actuelle = float(st.session_state["reglages"]["zone_lon"])
+
+        vivier = chercher_entreprises_pool(
+            mode_zone=st.session_state["mode_carte_zone"],
+            codes_postaux_str=codes_postaux,
+            zone_lat=lat_actuelle,
+            zone_lon=lon_actuelle,
+            rayon_km=rayon_km,
+            mot_cle=theme_recherche,
+            tous_types=tous_types,
+            renouveler=renouveler
+        )
 
         if not vivier:
-            st.error("Aucune entreprise trouvée dans l'annuaire officiel pour ces codes postaux. Vérifie les chiffres saisis.")
+            st.error("Aucune entreprise trouvée dans cette zone. Essaie d'agrandir le rayon ou de vérifier le code postal.")
         else:
             lignes_vivier = []
             for idx, ent in enumerate(vivier, start=1):
@@ -327,6 +522,12 @@ with tab2:
                 creation = str(ent.get("date_creation") or "Inconnue")[:4]
                 lignes_vivier.append(f"{idx}. Nom: {nom} | Code NAF: {naf} | Créée en: {creation} | Adresse: {adresse}")
 
+            zone_texte = (
+                f"un rayon de {rayon_km} km autour du point GPS ({lat_actuelle}, {lon_actuelle}) en Occitanie"
+                if st.session_state["mode_carte_zone"]
+                else f"les codes postaux ({codes_postaux})"
+            )
+
             objectif_texte = (
                 "TOUS TYPES D'ACTIVITÉS (choisis un mélange varié et pertinent de commerces, artisans et sociétés locales)"
                 if tous_types
@@ -335,7 +536,7 @@ with tab2:
 
             prompt_prospection = f"""Tu es le directeur commercial d'une entreprise spécialisée dans : {prosp_offre}.
 
-Voici une liste de {len(vivier)} vraies entreprises locales trouvées autour des codes postaux ({codes_postaux}) :
+Voici une liste de {len(vivier)} vraies entreprises locales trouvées dans {zone_texte} :
 {chr(10).join(lignes_vivier)}
 
 MISSION :
@@ -353,7 +554,7 @@ MISSION :
                 try:
                     donnees = ListeAnalyses.model_validate_json(texte_json)
                     tableau = []
-                    points_carte = []
+                    marqueurs_carte = []
 
                     for item in donnees.resultats:
                         index_reel = item.numero_entreprise - 1
@@ -379,7 +580,14 @@ MISSION :
                             lon = siege.get("longitude")
                             if lat and lon:
                                 try:
-                                    points_carte.append({"lat": float(lat), "lon": float(lon)})
+                                    marqueurs_carte.append({
+                                        "lat": float(lat),
+                                        "lon": float(lon),
+                                        "nom": nom_ent,
+                                        "adresse": adresse_ent,
+                                        "produit": item.produit_imprimerie,
+                                        "note": item.note_pertinence
+                                    })
                                 except ValueError:
                                     pass
 
@@ -387,6 +595,7 @@ MISSION :
                         st.success(f"✅ {len(tableau)} prospects sélectionnés et analysés sur mesure par l'IA !")
                         st.dataframe(tableau, use_container_width=True)
 
+                        # Export CSV pour Excel
                         buffer_csv = io.StringIO()
                         writer = csv.DictWriter(buffer_csv, fieldnames=tableau[0].keys(), delimiter=";")
                         writer.writeheader()
@@ -398,9 +607,45 @@ MISSION :
                             mime="text/csv"
                         )
 
-                        if points_carte:
-                            st.subheader("🗺️ Localisation des prospects retenus")
-                            st.map(points_carte, zoom=11)
+                        # Carte des résultats avec le NOM de chaque entreprise affiché
+                        if marqueurs_carte:
+                            st.subheader("🗺️ Localisation et noms des prospects trouvés")
+                            centre_lat = sum(m["lat"] for m in marqueurs_carte) / len(marqueurs_carte)
+                            centre_lon = sum(m["lon"] for m in marqueurs_carte) / len(marqueurs_carte)
+
+                            carte_resultats = folium.Map(location=[centre_lat, centre_lon], zoom_start=12)
+
+                            # Si recherche par zone, on affiche aussi le cercle sur la carte des résultats
+                            if st.session_state["mode_carte_zone"]:
+                                folium.Circle(
+                                    location=[lat_actuelle, lon_actuelle],
+                                    radius=rayon_km * 1000,
+                                    color="#1f77b4",
+                                    weight=1,
+                                    fill=True,
+                                    fill_opacity=0.08
+                                ).add_to(carte_resultats)
+
+                            for m in marqueurs_carte:
+                                fiche_html = (
+                                    f"<b>{m['nom']}</b> (Note : {m['note']}/10)<br>"
+                                    f"<i>{m['adresse']}</i><br><br>"
+                                    f"<b>Idée :</b> {m['produit']}"
+                                )
+                                folium.Marker(
+                                    location=[m["lat"], m["lon"]],
+                                    popup=folium.Popup(fiche_html, max_width=280),
+                                    tooltip=folium.Tooltip(f"<b>{m['nom']}</b>", permanent=True, direction="top"),
+                                    icon=folium.Icon(color="green", icon="briefcase", prefix="fa")
+                                ).add_to(carte_resultats)
+
+                            st_folium(
+                                carte_resultats,
+                                height=460,
+                                use_container_width=True,
+                                returned_objects=[],
+                                key="carte_resultats_prospects"
+                            )
                     else:
                         st.warning("L'IA a renvoyé des numéros hors liste. Clique à nouveau sur Rechercher.")
                 except Exception as e:

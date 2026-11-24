@@ -6,6 +6,7 @@ import io
 import csv
 import requests
 import feedparser
+from concurrent.futures import ThreadPoolExecutor
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
@@ -14,7 +15,7 @@ from pydantic import BaseModel
 st.set_page_config(page_title="Tableau de Bord Imprimerie", page_icon="🖨️", layout="wide")
 
 # --- 2. VERROU PAR MOT DE PASSE ---
-MOT_DE_PASSE_SECRET = "outilcommercial4321"  # <-- Remets ton mot de passe ici
+MOT_DE_PASSE_SECRET = "Enseignes2026"  # <-- Remets ton mot de passe ici
 
 if "connecte" not in st.session_state:
     st.session_state["connecte"] = False
@@ -44,9 +45,17 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
+def _appel_unique_ia(modele: str, prompt: str, config_args: dict) -> str:
+    response = client.models.generate_content(
+        model=modele,
+        contents=prompt,
+        config=types.GenerateContentConfig(**config_args)
+    )
+    return response.text
+
 def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.9):
-    """Appelle toujours la vraie IA Google avec patience (aucun texte préfait)."""
-    modeles_valides = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    """Appelle la vraie IA Google avec chronomètre de 20s max par essai (aucun texte préfait)."""
+    modeles_actifs = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
     zone_statut = st.empty()
     derniere_erreur = ""
 
@@ -55,30 +64,32 @@ def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.9):
         config_args["response_mime_type"] = "application/json"
         config_args["response_schema"] = schema
 
-    # On fait jusqu'à 4 cycles complets pour laisser le temps aux serveurs Google de répondre
-    for cycle in range(1, 5):
-        for modele in modeles_valides:
-            zone_statut.info(f"⏳ L'IA réfléchit et rédige sur mesure (cycle {cycle}/4 — modèle {modele})... Merci de patienter.")
+    for cycle in range(1, 4):
+        for modele in list(modeles_actifs):
+            zone_statut.info(f"⏳ L'IA rédige sur mesure (essai {cycle}/3 — {modele})... 20 sec max.")
+            executor = ThreadPoolExecutor(max_workers=1)
+            futur = executor.submit(_appel_unique_ia, modele, prompt, config_args)
             try:
-                response = client.models.generate_content(
-                    model=modele,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(**config_args)
-                )
-                if response.text:
+                texte = futur.result(timeout=20)
+                executor.shutdown(wait=False)
+                if texte:
                     zone_statut.empty()
-                    return response.text, None
+                    return texte, None
             except Exception as e:
-                derniere_erreur = str(e)
-                # Si la clé API est fausse, inutile d'attendre
+                executor.shutdown(wait=False)
+                derniere_erreur = str(e) if str(e) else "Délai de 20 secondes dépassé"
                 if "API_KEY_INVALID" in derniere_erreur or "API key not valid" in derniere_erreur:
                     zone_statut.empty()
-                    return None, "Ta clé GEMINI_API_KEY dans les Secrets de Streamlit semble invalide."
-                time.sleep(2)
+                    return None, "Ta clé GEMINI_API_KEY dans les Secrets de Streamlit est invalide."
+                if "404" in derniere_erreur or "not found" in derniere_erreur.lower():
+                    modeles_actifs.remove(modele)
+                time.sleep(1)
 
-        # Pause progressive entre deux cycles si Google est très chargé
-        pause = cycle * 4
-        zone_statut.warning(f"🚦 Serveurs Google très sollicités. Nouvelle tentative automatique dans {pause} secondes...")
+        if not modeles_actifs:
+            break
+
+        pause = cycle * 3
+        zone_statut.warning(f"🚦 Serveurs Google occupés ({derniere_erreur[:80]}). Nouvel essai dans {pause}s...")
         time.sleep(pause)
 
     zone_statut.empty()
@@ -103,7 +114,7 @@ def collecter_actualites(rss_urls, max_articles=5):
     headers = {"User-Agent": "Mozilla/5.0"}
     for url in rss_urls:
         try:
-            rep = requests.get(url, headers=headers, timeout=6)
+            rep = requests.get(url, headers=headers, timeout=5)
             flux = feedparser.parse(rep.content)
             for entry in flux.entries[:max_articles]:
                 titre = entry.get("title", "")
@@ -126,7 +137,6 @@ class ListeAnalyses(BaseModel):
     resultats: list[ProspectSelectionne]
 
 def chercher_entreprises_pool(codes_postaux_str: str, mot_cle: str, tous_types: bool, renouveler: bool):
-    """Récupère un large vivier d'entreprises locales pour que l'IA puisse interpréter et trier."""
     codes = [c.strip() for c in codes_postaux_str.split(",") if c.strip()]
     toutes_entreprises = []
     url = "https://recherche-entreprises.api.gouv.fr/search"
@@ -139,17 +149,15 @@ def chercher_entreprises_pool(codes_postaux_str: str, mot_cle: str, tous_types: 
             "per_page": 25,
             "page": page_api
         }
-        # Si l'utilisateur a mis un mot-clé précis (1 seul mot) et n'a pas coché "Tous types", on tente d'abord avec q
         mots = mot_cle.strip().split()
         if not tous_types and len(mots) == 1:
             params["q"] = mot_cle.strip()
 
         try:
-            rep = requests.get(url, params=params, timeout=10)
+            rep = requests.get(url, params=params, timeout=8)
             rep.raise_for_status()
             res = rep.json().get("results", [])
 
-            # Si trop peu de résultats (ou page aléatoire vide), on élargit sans filtre q sur la page 1
             if len(res) < 5:
                 params_larges = {
                     "code_postal": cp,
@@ -157,7 +165,7 @@ def chercher_entreprises_pool(codes_postaux_str: str, mot_cle: str, tous_types: 
                     "per_page": 25,
                     "page": 1
                 }
-                rep2 = requests.get(url, params=params_larges, timeout=10)
+                rep2 = requests.get(url, params=params_larges, timeout=8)
                 if rep2.status_code == 200:
                     res.extend(rep2.json().get("results", []))
 
@@ -165,7 +173,6 @@ def chercher_entreprises_pool(codes_postaux_str: str, mot_cle: str, tous_types: 
         except Exception:
             pass
 
-    # Suppression des doublons par SIREN
     uniques = {}
     for ent in toutes_entreprises:
         siren = ent.get("siren") or ent.get("nom_complet")
@@ -177,7 +184,6 @@ def chercher_entreprises_pool(codes_postaux_str: str, mot_cle: str, tous_types: 
     else:
         liste_propre.sort(key=lambda x: str(x.get("date_creation") or "0000"), reverse=True)
 
-    # On garde jusqu'à 25 candidats locaux pour que l'IA fasse le tri intelligent
     return liste_propre[:25]
 
 # --- 6. INTERFACE DU SITE ---
@@ -201,10 +207,9 @@ with tab1:
             placeholder="Ex: cartes de visite dorées, panneaux de chantier maçon, vitrine Noël..."
         )
 
-    # ICÔNE D'ENGRENAGE POUR PERSONNALISER CHAQUE PARTIE DU PROMPT
     with st.expander("⚙️ Paramètres du prompt (Introduction, Style, Corps, Conclusion)"):
         st.caption("Modifie ces réglages pour changer la façon dont l'IA écrit ta newsletter :")
-        
+
         p_identite = st.text_input(
             "Ton entreprise & tes produits :",
             value="Imprimerie moderne (cartes de visite, flyers, brochures, menus, affiches, enseignes de façade, logos sur bâtiment, vitrophanie, panneaux de chantier)"
@@ -263,7 +268,7 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
             st.info(f"**Sujet traité :** {sujet_final}")
             st.text_area("Copie-colle ce texte sur LinkedIn :", value=texte_genere, height=450)
         else:
-            st.error(f"❌ L'IA n'a pas pu répondre après plusieurs tentatives. Détail : {erreur}")
+            st.error(f"❌ L'IA n'a pas pu répondre. Détail : {erreur}")
 
 # ==============================================================================
 # ONGLET 2 : PROSPECTION INTELLIGENTE & MINI-CARTE
@@ -296,7 +301,6 @@ with tab2:
 
     limite = st.slider("Nombre de prospects à retenir et analyser :", 3, 12, 5)
 
-    # ICÔNE D'ENGRENAGE POUR PERSONNALISER LE PROMPT DE PROSPECTION
     with st.expander("⚙️ Paramètres du prompt de prospection"):
         st.caption("Ajuste les critères utilisés par l'IA pour sélectionner et démarcher tes prospects :")
         prosp_offre = st.text_input(
@@ -315,7 +319,6 @@ with tab2:
         if not vivier:
             st.error("Aucune entreprise trouvée dans l'annuaire officiel pour ces codes postaux. Vérifie les chiffres saisis.")
         else:
-            # Préparation de la liste brute pour l'IA
             lignes_vivier = []
             for idx, ent in enumerate(vivier, start=1):
                 nom = ent.get("nom_complet", "Entreprise")
@@ -345,7 +348,7 @@ MISSION :
             texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.9)
 
             if not texte_json:
-                st.error(f"❌ L'IA n'a pas pu analyser les prospects après plusieurs tentatives. Détail : {erreur_ia}")
+                st.error(f"❌ L'IA n'a pas pu analyser les prospects. Détail : {erreur_ia}")
             else:
                 try:
                     donnees = ListeAnalyses.model_validate_json(texte_json)
@@ -384,7 +387,6 @@ MISSION :
                         st.success(f"✅ {len(tableau)} prospects sélectionnés et analysés sur mesure par l'IA !")
                         st.dataframe(tableau, use_container_width=True)
 
-                        # Export CSV pour Excel
                         buffer_csv = io.StringIO()
                         writer = csv.DictWriter(buffer_csv, fieldnames=tableau[0].keys(), delimiter=";")
                         writer.writeheader()
@@ -396,7 +398,6 @@ MISSION :
                             mime="text/csv"
                         )
 
-                        # Mini-carte interactive
                         if points_carte:
                             st.subheader("🗺️ Localisation des prospects retenus")
                             st.map(points_carte, zoom=11)

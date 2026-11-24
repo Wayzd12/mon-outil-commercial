@@ -55,7 +55,7 @@ def _appel_unique_ia(modele: str, prompt: str, config_args: dict) -> str:
 
 def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.9):
     """Appelle la vraie IA Google avec chronomètre de 20s max par essai (aucun texte préfait)."""
-    modeles_actifs = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    modeles_actifs = ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
     zone_statut = st.empty()
     derniere_erreur = ""
 

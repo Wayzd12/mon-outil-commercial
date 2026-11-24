@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 st.set_page_config(page_title="Tableau de Bord Imprimerie", page_icon="🖨️", layout="wide")
 
 # --- 2. VERROU PAR MOT DE PASSE ---
-MOT_DE_PASSE_SECRET = "outilcommercial4321"  # <-- Remets ton mot de passe ici
+MOT_DE_PASSE_SECRET = "Enseignes2026"  # <-- Remets ton mot de passe ici
 
 if "connecte" not in st.session_state:
     st.session_state["connecte"] = False
@@ -46,8 +46,6 @@ REGLAGES_PAR_DEFAUT = {
     "p_conclusion": "Termine par 2 lignes de conclusion positives et une question ouverte simple pour inciter les lecteurs à commenter.",
     "prosp_offre": "Impression petit et grand format : cartes de visite, flyers, brochures, menus, étiquettes, enseignes de façade, logos en relief, vitrophanie, panneaux de chantier, marquage véhicule",
     "prosp_consignes": "1. Tiens compte de la localisation précise ({lieu_cible}) et de l'adresse exacte de chaque entreprise.\n2. Sélectionne uniquement les entreprises qui ont un vrai rapport avec le thème demandé (en décodant leur code activité NAF et leur nom).\n3. Adapte le produit recommandé à l'emplacement (avenue/zone = grande enseigne ou panneau ; rue commerçante = vitrine, flyers ou menus ; artisan = panneaux de chantier et cartes de visite) et à l'année de création (récente = pack création ; ancienne = modernisation).\n4. Écris un message LinkedIn court (max 230 caractères), poli, ancré localement sur {lieu_cible} et jamais répétitif d'une ligne à l'autre.",
-    "appel_atouts": "Imprimerie locale réactive : déplacement gratuit sur place pour prendre les cotes ou montrer des échantillons de papier/matières, conseil graphique, délais courts et suivi personnalisé.",
-    "appel_objections": "Je commande déjà sur Internet (Vistaprint, etc.), J'ai déjà mon imprimeur habituel, Je n'ai pas le temps / envoyez-moi un mail, C'est trop cher pour moi",
     "codes_postaux": "34670",
     "zone_lat": 43.6667,
     "zone_lon": 4.0303,
@@ -84,9 +82,6 @@ if "check_tous_types" not in st.session_state:
 
 if "dernier_clic_carte" not in st.session_state:
     st.session_state["dernier_clic_carte"] = None
-
-if "derniers_prospects" not in st.session_state:
-    st.session_state["derniers_prospects"] = []
 
 # --- 4. CONNEXION À L'IA GOOGLE ---
 st.title("🖨️ Tableau de Bord — Imprimerie & Enseignes")
@@ -241,6 +236,7 @@ def identifier_communes_cp(codes_postaux_str: str):
     return villes
 
 def extraire_mots_cles_significatifs(mot_cle: str) -> list:
+    """Extrait les mots-clés utiles d'une expression (ex: 'commerces avec vitrine' -> ['commerces', 'vitrine'])."""
     mots_vides = {
         "avec", "sans", "pour", "dans", "les", "des", "une", "qui", "font",
         "sur", "par", "aux", "type", "types", "entreprise", "entreprises", "societe", "societes"
@@ -331,6 +327,7 @@ def chercher_entreprises_pool(
     if mode_zone:
         _, cps_gps, code_dept = identifier_commune_gps(zone_lat, zone_lon)
 
+        # 1. Si un mot-clé est renseigné, on cherche d'abord par mot-clé dans le département et on filtre dans le cercle GPS
         if not tous_types and mots_cles_list and code_dept:
             url_search = "https://recherche-entreprises.api.gouv.fr/search"
             requetes_q = [mot_cle.strip()] if len(mots_cles_list) > 1 else []
@@ -358,6 +355,7 @@ def chercher_entreprises_pool(
                 if len(vivier_brut) >= 35:
                     break
 
+        # 2. On complète (ou on cherche si "Tous types d'activités") avec le radar GPS local /near_point
         if tous_types or len(vivier_brut) < 15:
             url_geo = "https://recherche-entreprises.api.gouv.fr/near_point"
             pages_geo = [1, 2, random.randint(3, 5)] if renouveler else [1, 2, 3]
@@ -386,6 +384,7 @@ def chercher_entreprises_pool(
 
         for cp in codes:
             if not tous_types and mots_cles_list:
+                # 1. Recherche ciblée sur l'expression puis sur chaque mot-clé significatif
                 requetes_q = [mot_cle.strip()] if len(mots_cles_list) > 1 else []
                 requetes_q.extend(mots_cles_list)
                 for terme in dict.fromkeys(requetes_q):
@@ -416,6 +415,7 @@ def chercher_entreprises_pool(
                     except Exception:
                         pass
 
+            # 2. Si "Tous types" OU si le mot-clé était une idée large (ex: "commerces avec vitrine"), on charge un large panel local
             if tous_types or len(vivier_brut) < 8:
                 pages_larges = [1, 2] if not renouveler else [1, random.randint(2, 4)]
                 for p_large in dict.fromkeys(pages_larges):
@@ -438,19 +438,7 @@ def chercher_entreprises_pool(
 
     return liste_propre[:40]
 
-# --- 7. OUTILS POUR LE SCRIPT D'APPEL & OBJECTIONS ---
-class ObjectionReponse(BaseModel):
-    objection_client: str
-    reponse_conseillee: str
-
-class ScriptAppelComplet(BaseModel):
-    accroche_15_secondes: str
-    questions_decouverte: list[str]
-    argumentaire_produit: str
-    proposition_rdv: str
-    objections: list[ObjectionReponse]
-
-# --- 8. BARRE DE SAUVEGARDE PERMANENTE DES RÉGLAGES ---
+# --- 7. BARRE DE SAUVEGARDE PERMANENTE DES RÉGLAGES ---
 with st.expander("💾 Sauvegarder ou restaurer mes réglages préférés"):
     st.caption("Tes réglages sont mémorisés dès que tu cliques sur Enregistrer. Télécharge aussi le petit fichier de secours pour pouvoir les recharger en 1 clic si le site se met en veille.")
     col_s1, col_s2 = st.columns(2)
@@ -471,12 +459,8 @@ with st.expander("💾 Sauvegarder ou restaurer mes réglages préférés"):
             except Exception:
                 st.error("Fichier invalide.")
 
-# --- 9. INTERFACE DU SITE (3 ONGLETS) ---
-tab1, tab2, tab3 = st.tabs([
-    "📝 Ma Newsletter LinkedIn",
-    "🎯 Prospection & Carte Locale",
-    "📞 Script d'Appel & Objections"
-])
+# --- 8. INTERFACE DU SITE (2 ONGLETS) ---
+tab1, tab2 = st.tabs(["📝 Ma Newsletter LinkedIn", "🎯 Prospection & Carte Locale"])
 
 # ==============================================================================
 # ONGLET 1 : NEWSLETTER PERSONNALISABLE
@@ -781,6 +765,7 @@ MISSION :
                             note_propre = round(item.note_pertinence / 10) if item.note_pertinence > 10 else item.note_pertinence
                             note_propre = max(1, min(10, note_propre))
 
+                            # Lorsque un mot-clé précis est demandé, on écarte toute entreprise jugée peu pertinente (< 5/10)
                             if (not tous_types) and note_propre < 5:
                                 continue
 
@@ -811,7 +796,6 @@ MISSION :
 
                     if tableau:
                         tableau.sort(key=lambda x: x["Note /10"], reverse=True)
-                        st.session_state["derniers_prospects"] = tableau
                         st.success(f"✅ {len(tableau)} prospect(s) pertinent(s) trouvé(s) sur {lieu_cible} !")
 
                         if (not tous_types) and len(tableau) < limite:
@@ -882,168 +866,3 @@ MISSION :
                             st.warning(f"Aucune entreprise en rapport avec « {theme_recherche} » n'a été trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou d'utiliser un mot-clé plus général.")
                 except Exception as e:
                     st.error(f"Erreur de lecture de la réponse IA : {e}")
-
-# ==============================================================================
-# ONGLET 3 : SCRIPT D'APPEL TÉLÉPHONIQUE & RÉPONSES AUX OBJECTIONS
-# ==============================================================================
-with tab3:
-    st.header("Préparer un appel commercial et répondre aux objections")
-
-    PRODUITS_APPEL = [
-        "Cartes de visite (papier épais 350g/400g, pelliculage mat, vernis sélectif)",
-        "Enseigne de façade & logo en relief (Dibond, lettres découpées, bandeau lumineux)",
-        "Panneaux de chantier & immobiliers (Akilux alvéolaire, Dibond rigide)",
-        "Flyers, dépliants 2 ou 3 volets & brochures commerciales",
-        "Vitrophanie & habillage de vitrine (adhésif micro-perforé, lettrage)",
-        "Marquage de véhicule utilitaire (flocage logo, coordonnées, semi-covering)",
-        "Menus, sets de table, affiches & stop-trottoirs pour commerces / restaurants",
-        "Kakémonos, roll-ups & stands pour salons et événements"
-    ]
-
-    PROFILS_CLIENTS = [
-        "Artisan du bâtiment / travaux (maçon, plombier, électricien, paysagiste...)",
-        "Commerçant / Boutique avec vitrine",
-        "Restaurant / Café / Boulangerie / Traiteur",
-        "Nouvelle entreprise qui vient d'ouvrir",
-        "PME / Agence immobilière / Cabinet de services",
-        "Autre profil (préciser ci-dessous)"
-    ]
-
-    col_ap1, col_ap2 = st.columns(2)
-    with col_ap1:
-        produit_appel = st.selectbox("1. Produit d'imprimerie à vendre :", PRODUITS_APPEL)
-        produit_precision = st.text_input(
-            "Précision sur l'offre ou promotion (facultatif) :",
-            placeholder="Ex: pack 500 cartes + 1000 flyers, devis gratuit sur place..."
-        )
-    with col_ap2:
-        profil_client = st.selectbox("2. Type de client appelé :", PROFILS_CLIENTS)
-        objectif_appel = st.selectbox(
-            "3. Objectif de l'appel :",
-            [
-                "Décrocher un rendez-vous rapide sur place (montrer des échantillons / prendre les cotes)",
-                "Se faire connaître comme imprimerie locale et envoyer un devis / catalogue",
-                "Relancer un besoin saisonnier ou une ouverture récente"
-            ]
-        )
-
-    # Option pratique : importer un prospect trouvé dans l'onglet 2 ou saisir un nom manuellement
-    options_prospects = ["Saisie manuelle (ou appel générique sans nom précis)"]
-    for p in st.session_state["derniers_prospects"]:
-        options_prospects.append(f"{p['Entreprise']} ({p['Adresse locale']})")
-
-    col_cib1, col_cib2 = st.columns(2)
-    with col_cib1:
-        choix_prospect_existant = st.selectbox(
-            "4. Reprendre un prospect trouvé dans l'onglet 2 (facultatif) :",
-            options_prospects
-        )
-    with col_cib2:
-        cible_manuelle = st.text_input(
-            "Ou écrire le nom de l'entreprise / ville appelée :",
-            placeholder="Ex: Garage du Soleil à Saint-Brès"
-        )
-
-    with st.expander("⚙️ Paramètres du script d'appel (Atouts locaux & Objections fréquentes)"):
-        st.caption("Personnalise tes points forts et les objections que tu entends le plus souvent :")
-        appel_atouts = st.text_area(
-            "Tes points forts d'imprimeur local :",
-            value=reg["appel_atouts"],
-            height=80
-        )
-        appel_objections = st.text_area(
-            "Liste des objections clients à traiter (séparées par une virgule) :",
-            value=reg["appel_objections"],
-            height=80
-        )
-        if st.button("💾 Enregistrer ces réglages Appel"):
-            sauvegarder_reglages_sur_disque({
-                "appel_atouts": appel_atouts,
-                "appel_objections": appel_objections
-            })
-            st.success("✅ Tes réglages d'appel sont enregistrés !")
-
-    if st.button("📞 Générer mon script d'appel et mes réponses aux objections", type="primary"):
-        if choix_prospect_existant != options_prospects[0]:
-            cible_texte = choix_prospect_existant
-        elif cible_manuelle.strip():
-            cible_texte = cible_manuelle.strip()
-        else:
-            cible_texte = f"un professionnel local ({profil_client})"
-
-        offre_finale = f"{produit_appel} ({produit_precision.strip()})" if produit_precision.strip() else produit_appel
-
-        prompt_appel = f"""Tu es un coach commercial spécialisé dans la vente terrain pour une imprimerie et atelier de signalétique.
-Prépare une fiche d'appel téléphonique ultra-concrète, naturelle et persuasive (zéro ton robotique de centre d'appel).
-
-PARAMÈTRES DE L'APPEL :
-- Produit mis en avant : {offre_finale}
-- Profil du prospect : {profil_client}
-- Entreprise / lieu ciblé : {cible_texte}
-- Objectif de l'appel : {objectif_appel}
-- Atouts de notre imprimerie : {appel_atouts}
-- Objections habituelles à préparer : {appel_objections}
-
-CONSIGNES DE RÉDACTION :
-1. `accroche_15_secondes` : Une phrase d'entrée polie, locale, directe (qui annonce tout de suite qu'on est un imprimeur voisin et pourquoi on appelle).
-2. `questions_decouverte` : Exactement 3 questions courtes et ouvertes pour faire parler le client sur ses besoins actuels liés à {produit_appel}.
-3. `argumentaire_produit` : Un argumentaire court (4 à 5 lignes max) axé sur les bénéfices concrets pour le client (visibilité, qualité du rendu, gain de clients, proximité).
-4. `proposition_rdv` : Une phrase simple pour conclure et obtenir l'accord ({objectif_appel}).
-5. `objections` : Traite 5 objections réalistes (en incluant celles de la liste '{appel_objections}' + 1 objection spécifique à '{produit_appel}'). Pour chaque objection, donne une réponse courte, calme, empathique et qui relance la conversation sans être agressif."""
-
-        texte_script_json, erreur_appel = appeler_gemini_patient(
-            prompt_appel,
-            schema=ScriptAppelComplet,
-            temperature=0.85
-        )
-
-        if not texte_script_json:
-            st.error(f"❌ L'IA n'a pas pu générer le script. Détail : {erreur_appel}")
-        else:
-            try:
-                script = ScriptAppelComplet.model_validate_json(texte_script_json)
-                st.success(f"✅ Fiche d'appel prête pour : {offre_finale}")
-
-                col_sc1, col_sc2 = st.columns(2)
-                with col_sc1:
-                    st.subheader("1️⃣ Accroche (15 premières secondes)")
-                    st.info(script.accroche_15_secondes)
-
-                    st.subheader("2️⃣ Questions à poser au client")
-                    for idx_q, q in enumerate(script.questions_decouverte, start=1):
-                        st.markdown(f"**{idx_q}.** {q}")
-
-                with col_sc2:
-                    st.subheader("3️⃣ Argumentaire produit")
-                    st.write(script.argumentaire_produit)
-
-                    st.subheader("4️⃣ Conclure et obtenir le rendez-vous")
-                    st.success(script.proposition_rdv)
-
-                st.divider()
-                st.subheader("🛡️ Réponses prêtes aux objections du client")
-                for obj in script.objections:
-                    with st.expander(f"❓ « {obj.objection_client} »", expanded=True):
-                        st.write(obj.reponse_conseillee)
-
-                # Version texte brut complète pour copier-coller ou imprimer
-                lignes_export = [
-                    f"FICHE D'APPEL — {offre_finale.upper()}",
-                    f"Cible : {cible_texte}",
-                    "=" * 50,
-                    "\n1. ACCROCHE (15 SECONDES) :",
-                    script.accroche_15_secondes,
-                    "\n2. QUESTIONS DE DÉCOUVERTE :",
-                    *[f"- {q}" for q in script.questions_decouverte],
-                    "\n3. ARGUMENTAIRE PRODUIT :",
-                    script.argumentaire_produit,
-                    "\n4. CONCLUSION / PROPOSITION :",
-                    script.proposition_rdv,
-                    "\n5. RÉPONSES AUX OBJECTIONS :",
-                    *[f"\n* Objection : « {o.objection_client} »\n  Réponse : {o.reponse_conseillee}" for o in script.objections]
-                ]
-                texte_complet_fiche = "\n".join(lignes_export)
-                st.text_area("📋 Fiche complète prête à copier ou imprimer :", value=texte_complet_fiche, height=260)
-
-            except Exception as e:
-                st.error(f"Erreur de lecture de la réponse IA : {e}")

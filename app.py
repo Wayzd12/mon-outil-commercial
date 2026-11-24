@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import json
+import math
 import time
 import random
 import io
@@ -18,7 +19,7 @@ from pydantic import BaseModel
 st.set_page_config(page_title="Tableau de Bord Imprimerie", page_icon="🖨️", layout="wide")
 
 # --- 2. VERROU PAR MOT DE PASSE ---
-MOT_DE_PASSE_SECRET = "outilcommercial4321"  # <-- Remets ton mot de passe ici
+MOT_DE_PASSE_SECRET = "Enseignes2026"  # <-- Remets ton mot de passe ici
 
 if "connecte" not in st.session_state:
     st.session_state["connecte"] = False
@@ -46,7 +47,7 @@ REGLAGES_PAR_DEFAUT = {
     "prosp_offre": "Impression petit et grand format : cartes de visite, flyers, brochures, menus, étiquettes, enseignes de façade, logos en relief, vitrophanie, panneaux de chantier, marquage véhicule",
     "prosp_consignes": "1. Sélectionne en priorité les entreprises les plus pertinentes par rapport au thème demandé (en décodant leur code activité NAF et leur nom).\n2. Adapte le produit recommandé à l'adresse (avenue/zone = grande enseigne ou panneau ; rue commerçante = vitrine, flyers ou menus ; artisan = panneaux de chantier et cartes de visite) et à l'année de création (récente = pack création ; ancienne = modernisation).\n3. Écris un message LinkedIn court (max 230 caractères), poli, local et jamais répétitif d'une ligne à l'autre.",
     "codes_postaux": "34670, 34740, 34130",
-    "zone_lat": 43.6667,  # Saint-Brès (Occitanie)
+    "zone_lat": 43.6667,
     "zone_lon": 4.0303,
     "rayon_km": 10
 }
@@ -184,6 +185,17 @@ class ProspectSelectionne(BaseModel):
 class ListeAnalyses(BaseModel):
     resultats: list[ProspectSelectionne]
 
+def calculer_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calcule la distance réelle en kilomètres entre deux points GPS."""
+    rayon_terre = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    )
+    return rayon_terre * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
 def chercher_entreprises_pool(
     mode_zone: bool,
     codes_postaux_str: str,
@@ -197,31 +209,39 @@ def chercher_entreprises_pool(
     toutes_entreprises = []
 
     if mode_zone:
-        # Recherche géographique par point GPS et rayon (km) en Occitanie
         url_geo = "https://recherche-entreprises.api.gouv.fr/near_point"
-        page_api = random.randint(1, 3) if renouveler else 1
-        params_geo = {
-            "lat": round(zone_lat, 5),
-            "long": round(zone_lon, 5),
-            "radius": rayon_km,
-            "per_page": 25,
-            "page": page_api
-        }
-        try:
-            rep = requests.get(url_geo, params=params_geo, timeout=10)
-            rep.raise_for_status()
-            res = rep.json().get("results", [])
-            if len(res) < 5 and page_api > 1:
-                params_geo["page"] = 1
-                rep2 = requests.get(url_geo, params=params_geo, timeout=10)
-                if rep2.status_code == 200:
-                    res.extend(rep2.json().get("results", []))
-            # On garde uniquement les entreprises encore en activité ("A")
-            toutes_entreprises = [e for e in res if e.get("etat_administratif") == "A"]
-        except Exception:
-            pass
+        pages_a_tester = [random.randint(1, 3), 1] if renouveler else [1]
+        for p in dict.fromkeys(pages_a_tester):
+            params_geo = {
+                "lat": round(zone_lat, 5),
+                "long": round(zone_lon, 5),
+                "radius": rayon_km,
+                "per_page": 25,
+                "page": p
+            }
+            try:
+                rep = requests.get(url_geo, params=params_geo, timeout=10)
+                rep.raise_for_status()
+                res = rep.json().get("results", [])
+                for ent in res:
+                    if ent.get("etat_administratif") != "A":
+                        continue
+                    siege = ent.get("siege", {})
+                    lat_s = siege.get("latitude")
+                    lon_s = siege.get("longitude")
+                    if lat_s and lon_s:
+                        try:
+                            # On vérifie que le siège est bien dans le rayon choisi (exclut Paris, Dijon, etc.)
+                            dist = calculer_distance_km(zone_lat, zone_lon, float(lat_s), float(lon_s))
+                            if dist <= rayon_km + 0.5:
+                                toutes_entreprises.append(ent)
+                        except ValueError:
+                            pass
+            except Exception:
+                pass
+            if len(toutes_entreprises) >= 15:
+                break
     else:
-        # Recherche classique par code(s) postal(aux)
         codes = [c.strip() for c in codes_postaux_str.split(",") if c.strip()]
         url = "https://recherche-entreprises.api.gouv.fr/search"
         for cp in codes:
@@ -250,7 +270,12 @@ def chercher_entreprises_pool(
                     rep2 = requests.get(url, params=params_larges, timeout=8)
                     if rep2.status_code == 200:
                         res.extend(rep2.json().get("results", []))
-                toutes_entreprises.extend(res)
+
+                for ent in res:
+                    siege_cp = str(ent.get("siege", {}).get("code_postal") or "").strip()
+                    # On garde uniquement les entreprises dont le siège est réellement dans les codes postaux demandés
+                    if siege_cp in codes:
+                        toutes_entreprises.append(ent)
             except Exception:
                 pass
 
@@ -368,10 +393,10 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
             st.error(f"❌ L'IA n'a pas pu répondre. Détail : {erreur}")
 
 # ==============================================================================
-# ONGLET 2 : PROSPECTION INTELLIGENTE & CARTE OCCITANIE
+# ONGLET 2 : PROSPECTION INTELLIGENTE & CARTE INTERACTIVE
 # ==============================================================================
 with tab2:
-    st.header("Trouver des prospects par code postal ou sur la carte d'Occitanie")
+    st.header("Trouver des prospects par code postal ou sur la carte")
 
     col_loc, col_btn_carte, col_act = st.columns([2, 1.3, 2.2])
 
@@ -380,16 +405,16 @@ with tab2:
             "Code(s) postal(aux) :",
             value=reg["codes_postaux"],
             disabled=st.session_state["mode_carte_zone"],
-            help="Désactivé lorsque le mode carte Occitanie est ouvert."
+            help="Désactivé lorsque la sélection sur carte est ouverte."
         )
 
     with col_btn_carte:
-        st.write("")  # Alignement vertical avec la case texte
+        st.write("")
         st.write("")
         label_bouton_carte = (
             "❌ Revenir aux codes postaux"
             if st.session_state["mode_carte_zone"]
-            else "🗺️ Zone sur carte (Occitanie)"
+            else "🗺️ Choisir sur la carte"
         )
         if st.button(label_bouton_carte, use_container_width=True):
             st.session_state["mode_carte_zone"] = not st.session_state["mode_carte_zone"]
@@ -403,9 +428,9 @@ with tab2:
             help="Ex: boulangerie, artisans de chantier, jeunes entreprises, agences..."
         )
 
-    # --- SÉLECTEUR DE ZONE INTERACTIF AU-DESSUS DE L'OCCITANIE ---
+    # --- SÉLECTEUR DE ZONE INTERACTIF ---
     if st.session_state["mode_carte_zone"]:
-        st.info("👆 **Clique n'importe où sur la carte de l'Occitanie** pour déplacer le centre de recherche, et ajuste la taille du cercle avec le curseur ci-dessous.")
+        st.info("👆 **Clique n'importe où sur la carte** pour déplacer le centre de recherche, et ajuste la taille du cercle avec le curseur ci-dessous.")
         col_z1, col_z2 = st.columns([3, 1])
         with col_z1:
             rayon_km = st.slider(
@@ -416,17 +441,16 @@ with tab2:
             )
         with col_z2:
             st.write("")
-            if st.button("📍 Recentrer sur Saint-Brès"):
+            if st.button("📍 Recentrer le point"):
                 sauvegarder_reglages_sur_disque({"zone_lat": 43.6667, "zone_lon": 4.0303})
                 st.rerun()
 
         lat_centre = float(st.session_state["reglages"]["zone_lat"])
         lon_centre = float(st.session_state["reglages"]["zone_lon"])
 
-        # Création de la carte centrée sur l'Occitanie
-        carte_occitanie = folium.Map(location=[43.65, 3.35], zoom_start=8)
+        # Caméra placée au-dessus de l'Occitanie par défaut
+        carte_zone = folium.Map(location=[43.65, 3.35], zoom_start=8)
 
-        # Cercle bleu représentant la zone exacte de recherche
         folium.Circle(
             location=[lat_centre, lon_centre],
             radius=rayon_km * 1000,
@@ -436,24 +460,22 @@ with tab2:
             fill_color="#1f77b4",
             fill_opacity=0.2,
             tooltip=f"Zone de recherche : {rayon_km} km autour de ce point"
-        ).add_to(carte_occitanie)
+        ).add_to(carte_zone)
 
-        # Marqueur central
         folium.Marker(
             location=[lat_centre, lon_centre],
             tooltip=f"Centre sélectionné (rayon {rayon_km} km)",
             icon=folium.Icon(color="red", icon="crosshairs", prefix="fa")
-        ).add_to(carte_occitanie)
+        ).add_to(carte_zone)
 
         retour_carte = st_folium(
-            carte_occitanie,
+            carte_zone,
             height=400,
             use_container_width=True,
             returned_objects=["last_clicked"],
-            key="selecteur_occitanie"
+            key="selecteur_zone_carte"
         )
 
-        # Détection d'un clic sur la carte pour déplacer le cercle
         if retour_carte and retour_carte.get("last_clicked"):
             clic = retour_carte["last_clicked"]
             nouveau_coord = (round(clic["lat"], 5), round(clic["lng"], 5))
@@ -512,7 +534,7 @@ with tab2:
         )
 
         if not vivier:
-            st.error("Aucune entreprise trouvée dans cette zone. Essaie d'agrandir le rayon ou de vérifier le code postal.")
+            st.error("Aucune entreprise locale trouvée dans cette zone précise. Essaie d'agrandir un peu le rayon ou de vérifier le code postal.")
         else:
             lignes_vivier = []
             for idx, ent in enumerate(vivier, start=1):
@@ -523,7 +545,7 @@ with tab2:
                 lignes_vivier.append(f"{idx}. Nom: {nom} | Code NAF: {naf} | Créée en: {creation} | Adresse: {adresse}")
 
             zone_texte = (
-                f"un rayon de {rayon_km} km autour du point GPS ({lat_actuelle}, {lon_actuelle}) en Occitanie"
+                f"un rayon de {rayon_km} km autour du point GPS ({lat_actuelle}, {lon_actuelle})"
                 if st.session_state["mode_carte_zone"]
                 else f"les codes postaux ({codes_postaux})"
             )
@@ -536,7 +558,7 @@ with tab2:
 
             prompt_prospection = f"""Tu es le directeur commercial d'une entreprise spécialisée dans : {prosp_offre}.
 
-Voici une liste de {len(vivier)} vraies entreprises locales trouvées dans {zone_texte} :
+Voici une liste de {len(vivier)} vraies entreprises locales situées exclusivement dans {zone_texte} :
 {chr(10).join(lignes_vivier)}
 
 MISSION :
@@ -592,7 +614,7 @@ MISSION :
                                     pass
 
                     if tableau:
-                        st.success(f"✅ {len(tableau)} prospects sélectionnés et analysés sur mesure par l'IA !")
+                        st.success(f"✅ {len(tableau)} prospects locaux sélectionnés et analysés sur mesure !")
                         st.dataframe(tableau, use_container_width=True)
 
                         # Export CSV pour Excel
@@ -615,7 +637,6 @@ MISSION :
 
                             carte_resultats = folium.Map(location=[centre_lat, centre_lon], zoom_start=12)
 
-                            # Si recherche par zone, on affiche aussi le cercle sur la carte des résultats
                             if st.session_state["mode_carte_zone"]:
                                 folium.Circle(
                                     location=[lat_actuelle, lon_actuelle],

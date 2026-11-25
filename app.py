@@ -537,16 +537,25 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                 st.success("✅ Newsletter rédigée par l'IA !")
                 st.info(f"**Sujet traité :** {sujet_final}")
                 
-                # Récupération dynamique de l'image grâce au choix de l'IA
-                mots_anglais_propre = donnees_nl.mot_cle_image.replace(" ", ",")
-                url_image_internet = f"https://loremflickr.com/800/400/{mots_anglais_propre}"
+                # --- DIVISION DE LA PAGE EN 2 COLONNES ---
+                col_texte, col_images = st.columns([1.4, 1])
                 
-                st.image(url_image_internet, caption=f"Illustration choisie par l'IA (Mots-clés : {donnees_nl.mot_cle_image})", use_container_width=True)
-                st.text_area("Copie-colle ce texte sur LinkedIn :", value=donnees_nl.texte_newsletter, height=450)
+                with col_texte:
+                    st.subheader("📝 Texte de la Newsletter")
+                    st.text_area("Copie-colle ce texte sur LinkedIn :", value=donnees_nl.texte_newsletter, height=500)
+                
+                with col_images:
+                    st.subheader("🖼️ Vraies photos trouvées")
+                    mots_anglais_propre = donnees_nl.mot_cle_image.replace(" ", ",")
+                    
+                    # On affiche 2 ou 3 vraies photos différentes basées sur les mots-clés de l'IA
+                    for i in range(2):
+                        # Le paramètre ?lock=... permet de forcer LoremFlickr à piocher 2 photos différentes
+                        url_vraie_photo = f"https://loremflickr.com/800/500/{mots_anglais_propre}?lock={i+15}"
+                        st.image(url_vraie_photo, caption=f"Photo réelle n°{i+1} ({donnees_nl.mot_cle_image})", use_container_width=True)
                 
             except Exception as e:
                 st.error(f"Erreur de lecture de la réponse IA : {e}")
-
         else:
             st.error(f"❌ L'IA n'a pas pu répondre. Détail : {erreur}")
 

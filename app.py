@@ -8,6 +8,7 @@ import io
 import csv
 import requests
 import feedparser
+import urllib.parse
 import folium
 from streamlit_folium import st_folium
 from concurrent.futures import ThreadPoolExecutor
@@ -62,6 +63,21 @@ def charger_reglages():
         except Exception:
             pass
     return donnees
+
+def recuperer_image_ia_securisee(prompt):
+    """Tente de récupérer l'image IA avec 3 essais max et 3 secondes d'attente entre chaque essai."""
+    prompt_encoded = urllib.parse.quote(prompt)
+    url = f"https://pollinations.ai/p/{prompt_encoded}?width=600&height=600&nologo=true&seed={random.randint(1, 10000)}"
+    
+    for essai in range(3):
+        try:
+            rep = requests.get(url, timeout=6)
+            if rep.status_code == 200 and len(rep.content) > 1000:
+                return rep.content  # Retourne les octets de l'image si réussi
+        except Exception:
+            pass
+        time.sleep(3)  # Attends 3 secondes avant de relancer si les serveurs sont occupés
+    return None
 
 def sauvegarder_reglages_sur_disque(nouveaux_reglages: dict):
     st.session_state["reglages"].update(nouveaux_reglages)
@@ -158,7 +174,9 @@ THEMES_IMPRIMERIE = [
     "Les salons professionnels et événements : kakémonos, roll-ups et stands portables pour sortir du lot",
     "Les autocollants, étiquettes produits et packaging : donner une allure haut de gamme aux producteurs locaux",
     "Le marquage de véhicules utilitaires : transformer ses trajets quotidiens en panneau publicitaire mobile",
-    "La cohérence visuelle d'une entreprise : aligner cartes de visite, devis papier et enseigne de façade"
+    "La cohérence visuelle d'une entreprise : aligner cartes de visite, devis papier et enseigne de façade",
+    "tampons personnalisables et gravures sur plaques pour l'office : petite signalétique",
+    "clé USB et objets publicitaires : pourquoi afficher sa marque sur des produits du quotidien marque les esprits"
 ]
 
 def collecter_actualites(rss_urls, max_articles=5):
@@ -535,27 +553,24 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
             try:
                 donnees_nl = NewsletterReponse.model_validate_json(texte_json)
                 st.success("✅ Newsletter rédigée par l'IA !")
-                st.info(f"**Sujet traité :** {sujet_final}")
                 
                 # --- DIVISION DE LA PAGE EN 2 COLONNES ---
                 col_texte, col_images = st.columns([1.5, 1])
                 
                 with col_texte:
-                    st.subheader("📝 Texte de la Newsletter")
-                    # Correction pour que les retours à la ligne s'affichent correctement
+                    st.subheader("Texte de la newsletter")
+                    # Restauration propre des retours à la ligne
                     texte_propre = donnees_nl.texte_newsletter.replace("\\n", "\n")
-                    st.text_area("Copie-colle ce texte sur LinkedIn :", value=texte_propre, height=500)
+                    st.text_area("Copie-colle ce texte sur LinkedIn :", value=texte_propre, height=485, label_visibility="collapsed")
                 
                 with col_images:
-                    st.subheader("🖼️ Avant (IA) / Après (Pro)")
+                    st.subheader("Visuels")
                     
-                    import urllib.parse
+                    # 1. Tentative de récupération de l'image IA avec le cycle de sécurité (3s d'attente si occupé)
+                    with st.spinner("Génération des visuels en cours..."):
+                        img_bytes = recuperer_image_ia_securisee(donnees_nl.prompt_image_humour)
                     
-                    # 1. Image humoristique générée par IA (gauche)
-                    prompt_hum_encoded = urllib.parse.quote(donnees_nl.prompt_image_humour)
-                    url_img_hum = f"https://pollinations.ai/p/{prompt_hum_encoded}?width=600&height=600&nologo=true&seed={random.randint(1, 10000)}"
-                    
-                    # 2. Vraie photo professionnelle instantanée (droite) via Unsplash selon le mot-clé de l'IA
+                    # 2. Vraie photo professionnelle Unsplash (instantanée)
                     cat = donnees_nl.categorie_produit.lower()
                     if "card" in cat:
                         unsplash_id = "1633533824538-2321522f77dd"
@@ -564,22 +579,32 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                     elif "restaurant" in cat:
                         unsplash_id = "1517248135467-4c7edcad34c4"
                     else:
-                        unsplash_id = "1562564055-71e051d33c19" # Imprimerie / papier par défaut
-                        
+                        unsplash_id = "1562564055-71e051d33c19"
                     url_img_pro = f"https://images.unsplash.com/photo-{unsplash_id}?w=600&h=600&fit=crop"
                     
-                    # Code HTML/CSS pour aligner les 2 images côte à côte à la même hauteur que le texte (~485px)
-                    html_images = f"""
-                    <div style="display: flex; gap: 10px; height: 485px; align-items: stretch; margin-top: 8px;">
-                        <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="Avant (Humour / IA)">
-                            <img src="{url_img_hum}" style="width: 100%; height: 100%; object-fit: cover;">
+                    # Conversion de l'image IA en données affichables si elle a réussi
+                    src_ia = ""
+                    if img_bytes:
+                        import base64
+                        encoded_img = base64.b64encode(img_bytes).decode('utf-8')
+                        src_ia = f"data:image/jpeg;base64,{encoded_img}"
+                    
+                    # Affichage côte à côte propre via HTML, sans aucune légende
+                    if src_ia:
+                        html_images = f"""
+                        <div style="display: flex; gap: 10px; height: 485px; align-items: stretch; margin-top: 8px;">
+                            <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                <img src="{src_ia}" style="width: 100%; height: 100%; object-fit: cover;">
+                            </div>
+                            <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                <img src="{url_img_pro}" style="width: 100%; height: 100%; object-fit: cover;">
+                            </div>
                         </div>
-                        <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="Après (Produit / Réel)">
-                            <img src="{url_img_pro}" style="width: 100%; height: 100%; object-fit: cover;">
-                        </div>
-                    </div>
-                    """
-                    st.markdown(html_images, unsafe_allow_html=True)
+                        """
+                        st.markdown(html_images, unsafe_allow_html=True)
+                    else:
+                        st.warning("⏳ Image en cours de chargement (serveurs IA occupés)... Réessaie dans un instant.")
+                        st.image(url_img_pro, use_container_width=True)
                 
             except Exception as e:
                 st.error(f"Erreur de lecture de la réponse IA : {e}")

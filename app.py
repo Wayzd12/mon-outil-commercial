@@ -84,7 +84,7 @@ if "dernier_clic_carte" not in st.session_state:
     st.session_state["dernier_clic_carte"] = None
 
 # --- 4. CONNEXION À L'IA GOOGLE ---
-st.title("🖨️ Tableau de Bord — Imprimerie & Enseignes")
+st.title("💹 Tableau de Bord — Commerce & Enseignes")
 
 try:
     api_key = st.secrets["GEMINI_API_KEY"]

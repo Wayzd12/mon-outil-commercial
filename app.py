@@ -530,7 +530,7 @@ STRUCTURE OBLIGATOIRE À SUIVRE :
 
 Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'introduction avant le titre."""
 
-        texte_json, erreur = appeler_gemini_patient(prompt_complet, schema=NewsletterReponse, temperature=0.95)
+         texte_json, erreur = appeler_gemini_patient(prompt_complet, schema=NewsletterReponse, temperature=0.95)
 
         if texte_json:
             try:
@@ -539,32 +539,34 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                 st.info(f"**Sujet traité :** {sujet_final}")
                 
                 # --- DIVISION DE LA PAGE EN 2 COLONNES ---
-                col_texte, col_images = st.columns([1.4, 1])
+                col_texte, col_images = st.columns([1.5, 1])
                 
                 with col_texte:
                     st.subheader("📝 Texte de la Newsletter")
-                    st.text_area("Copie-colle ce texte sur LinkedIn :", value=donnees_nl.texte_newsletter, height=500)
+                    # Correction pour que les retours à la ligne s'affichent correctement
+                    texte_propre = donnees_nl.texte_newsletter.replace("\\n", "\n")
+                    st.text_area("Copie-colle ce texte sur LinkedIn :", value=texte_propre, height=500)
                 
                 with col_images:
-                    st.subheader("🖼️ Visuels Avant / Après (IA)")
+                    st.subheader("🖼️ Visuels")
                     
                     import urllib.parse
                     
-                    # 1. Image du Produit / Solution (Après)
-                    prompt_prod_encoded = urllib.parse.quote(donnees_nl.prompt_image_produit)
-                    url_img_prod = f"https://pollinations.ai/p/{prompt_prod_encoded}?width=800&height=450&nologo=true&seed={random.randint(1, 10000)}"
-                    st.image(url_img_prod, caption="✨ Après (Le produit / La solution)", use_container_width=True)
-                    
-                    # 2. Image de l'Humour / Situation (Avant)
+                    # 1. Image "Avant" (Situation / Humour) au-dessus, sans texte de légende
                     prompt_hum_encoded = urllib.parse.quote(donnees_nl.prompt_image_humour)
-                    url_img_hum = f"https://pollinations.ai/p/{prompt_hum_encoded}?width=800&height=450&nologo=true&seed={random.randint(1, 10000)}"
-                    st.image(url_img_hum, caption="💡 Avant (La situation / Illustration décalée)", use_container_width=True)
-
+                    url_img_hum = f"https://pollinations.ai/p/{prompt_hum_encoded}?width=800&height=400&nologo=true&seed={random.randint(1, 10000)}"
+                    st.image(url_img_hum, use_container_width=True)
+                    
+                    # 2. Image "Après" (Produit / Solution) en dessous, sans texte de légende
+                    prompt_prod_encoded = urllib.parse.quote(donnees_nl.prompt_image_produit)
+                    url_img_prod = f"https://pollinations.ai/p/{prompt_prod_encoded}?width=800&height=400&nologo=true&seed={random.randint(1, 10000)}"
+                    st.image(url_img_prod, use_container_width=True)
                 
             except Exception as e:
                 st.error(f"Erreur de lecture de la réponse IA : {e}")
         else:
             st.error(f"❌ L'IA n'a pas pu répondre. Détail : {erreur}")
+
 
 # ==============================================================================
 # ONGLET 2 : PROSPECTION INTELLIGENTE & CARTE INTERACTIVE

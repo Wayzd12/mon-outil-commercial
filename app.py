@@ -190,9 +190,8 @@ class ListeAnalyses(BaseModel):
 
 class NewsletterReponse(BaseModel):
     texte_newsletter: str = Field(description="Le texte complet et prêt à publier de la newsletter")
-    prompt_image_produit: str = Field(description="Description détaillée en anglais montrant le produit d'imprimerie fini, élégant ou le résultat professionnel idéal (le côté 'après' / solution)")
-    prompt_image_humour: str = Field(description="Description détaillée en anglais d'une illustration créative, humoristique ou métaphorique en lien avec la situation initiale ou la blague du texte (le côté 'avant' / problème)")
-
+    prompt_image_humour: str = Field(description="Description détaillée en anglais d'une illustration créative, humoristique ou métaphorique en lien avec la situation initiale ou la blague du texte")
+    categorie_produit: str = Field(description="Un seul mot-clé en anglais parmi cette liste pour la vraie photo pro : 'businesscard', 'storefront', 'signage', 'restaurant', 'printing'")
 
 def calculer_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     rayon_terre = 6371.0
@@ -548,19 +547,39 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                     st.text_area("Copie-colle ce texte sur LinkedIn :", value=texte_propre, height=500)
                 
                 with col_images:
-                    st.subheader("🖼️ Visuels")
+                    st.subheader("🖼️ Avant (IA) / Après (Pro)")
                     
                     import urllib.parse
                     
-                    # 1. Image "Avant" (Situation / Humour) au-dessus, sans texte de légende
+                    # 1. Image humoristique générée par IA (gauche)
                     prompt_hum_encoded = urllib.parse.quote(donnees_nl.prompt_image_humour)
-                    url_img_hum = f"https://pollinations.ai/p/{prompt_hum_encoded}?width=800&height=400&nologo=true&seed={random.randint(1, 10000)}"
-                    st.image(url_img_hum, use_container_width=True)
+                    url_img_hum = f"https://pollinations.ai/p/{prompt_hum_encoded}?width=600&height=600&nologo=true&seed={random.randint(1, 10000)}"
                     
-                    # 2. Image "Après" (Produit / Solution) en dessous, sans texte de légende
-                    prompt_prod_encoded = urllib.parse.quote(donnees_nl.prompt_image_produit)
-                    url_img_prod = f"https://pollinations.ai/p/{prompt_prod_encoded}?width=800&height=400&nologo=true&seed={random.randint(1, 10000)}"
-                    st.image(url_img_prod, use_container_width=True)
+                    # 2. Vraie photo professionnelle instantanée (droite) via Unsplash selon le mot-clé de l'IA
+                    cat = donnees_nl.categorie_produit.lower()
+                    if "card" in cat:
+                        unsplash_id = "1633533824538-2321522f77dd"
+                    elif "store" in cat or "sign" in cat:
+                        unsplash_id = "1513519245088-0e12902e5a38"
+                    elif "restaurant" in cat:
+                        unsplash_id = "1517248135467-4c7edcad34c4"
+                    else:
+                        unsplash_id = "1562564055-71e051d33c19" # Imprimerie / papier par défaut
+                        
+                    url_img_pro = f"https://images.unsplash.com/photo-{unsplash_id}?w=600&h=600&fit=crop"
+                    
+                    # Code HTML/CSS pour aligner les 2 images côte à côte à la même hauteur que le texte (~485px)
+                    html_images = f"""
+                    <div style="display: flex; gap: 10px; height: 485px; align-items: stretch; margin-top: 8px;">
+                        <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="Avant (Humour / IA)">
+                            <img src="{url_img_hum}" style="width: 100%; height: 100%; object-fit: cover;">
+                        </div>
+                        <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="Après (Produit / Réel)">
+                            <img src="{url_img_pro}" style="width: 100%; height: 100%; object-fit: cover;">
+                        </div>
+                    </div>
+                    """
+                    st.markdown(html_images, unsafe_allow_html=True)
                 
             except Exception as e:
                 st.error(f"Erreur de lecture de la réponse IA : {e}")

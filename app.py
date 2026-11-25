@@ -546,12 +546,16 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                 
                 with col_images:
                     st.subheader("🖼️ Vraies photos trouvées")
-                    mots_anglais_propre = donnees_nl.mot_cle_image.replace(" ", ",")
                     
-                    # On affiche 2 ou 3 vraies photos différentes basées sur les mots-clés de l'IA
+                    # Nettoyage robuste des mots-clés pour éviter de casser le lien Internet
+                    mots_bruts = donnees_nl.mot_cle_image.replace(",", " ").split()
+                    mots_propres = ",".join([m.strip() for m in mots_bruts if m.strip()][:2])
+                    if not mots_propres:
+                        mots_propres = "printing"
+                    
+                    # On affiche 2 vraies photos différentes basées sur les mots-clés nettoyés
                     for i in range(2):
-                        # Le paramètre ?lock=... permet de forcer LoremFlickr à piocher 2 photos différentes
-                        url_vraie_photo = f"https://loremflickr.com/800/500/{mots_anglais_propre}?lock={i+15}"
+                        url_vraie_photo = f"https://loremflickr.com/800/500/{mots_propres}?lock={i+15}"
                         st.image(url_vraie_photo, caption=f"Photo réelle n°{i+1} ({donnees_nl.mot_cle_image})", use_container_width=True)
                 
             except Exception as e:

@@ -190,7 +190,7 @@ class ListeAnalyses(BaseModel):
 
 class NewsletterReponse(BaseModel):
     texte_newsletter: str = Field(description="Le texte complet et prêt à publier de la newsletter")
-    mot_cle_image: str = Field(description="2 ou 3 mots-clés en anglais simples décrivant l'image visuelle idéale (ex: printing press, modern storefront, business cards)")
+    prompt_image_ia: str = Field(description="Une description en anglais très détaillée, créative et originale d'un schéma explicatif, d'une infographie ou d'une illustration rigolote en lien direct avec le texte de la newsletter")
 
 
 def calculer_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -545,18 +545,16 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                     st.text_area("Copie-colle ce texte sur LinkedIn :", value=donnees_nl.texte_newsletter, height=500)
                 
                 with col_images:
-                    st.subheader("🖼️ Vraies photos trouvées")
+                    st.subheader("🎨 Illustration sur mesure (IA)")
                     
-                    # Nettoyage robuste des mots-clés pour éviter de casser le lien Internet
-                    mots_bruts = donnees_nl.mot_cle_image.replace(",", " ").split()
-                    mots_propres = ",".join([m.strip() for m in mots_bruts if m.strip()][:2])
-                    if not mots_propres:
-                        mots_propres = "printing"
+                    # On encode la description de l'IA pour le générateur d'images
+                    import urllib.parse
+                    prompt_encoded = urllib.parse.quote(donnees_nl.prompt_image_ia)
                     
-                    # On affiche 2 vraies photos différentes basées sur les mots-clés nettoyés
-                    for i in range(2):
-                        url_vraie_photo = f"https://loremflickr.com/800/500/{mots_propres}?lock={i+15}"
-                        st.image(url_vraie_photo, caption=f"Photo réelle n°{i+1} ({donnees_nl.mot_cle_image})", use_container_width=True)
+                    # Le paramètre seed aléatoire garantit une image 100% nouvelle et unique à chaque fois
+                    url_image_ia = f"https://pollinations.ai/p/{prompt_encoded}?width=800&height=500&nologo=true&seed={random.randint(1, 10000)}"
+                    
+                    st.image(url_image_ia, caption=f"Idée visuelle de l'IA : {donnees_nl.prompt_image_ia}", use_container_width=True)
                 
             except Exception as e:
                 st.error(f"Erreur de lecture de la réponse IA : {e}")

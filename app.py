@@ -188,6 +188,11 @@ class ProspectSelectionne(BaseModel):
 class ListeAnalyses(BaseModel):
     resultats: list[ProspectSelectionne]
 
+class NewsletterReponse(BaseModel):
+    texte_newsletter: str = Field(description="Le texte complet et prêt à publier de la newsletter")
+    mot_cle_image: str = Field(description="2 ou 3 mots-clés en anglais simples décrivant l'image visuelle idéale (ex: printing press, modern storefront, business cards)")
+
+
 def calculer_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     rayon_terre = 6371.0
     dlat = math.radians(lat2 - lat1)
@@ -524,35 +529,24 @@ STRUCTURE OBLIGATOIRE À SUIVRE :
 
 Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'introduction avant le titre."""
 
-        texte_genere, erreur = appeler_gemini_patient(prompt_complet, schema=None, temperature=0.95)
+             texte_json, erreur = appeler_gemini_patient(prompt_complet, schema=NewsletterReponse, temperature=0.95)
 
-        if texte_genere:
-            st.success("✅ Newsletter rédigée par l'IA !")
-            st.info(f"**Sujet traité :** {sujet_final}")
-            
-            # --- AJOUT DE L'IMAGE INTERNET ASSOCIÉE AU THÈME ---
-            mot_cle_img = "printing,signage,businesscard"
-            sujet_lower = sujet_final.lower()
-            if "carte" in sujet_lower:
-                mot_cle_img = "businesscard,printing"
-            elif "enseigne" in sujet_lower or "logo" in sujet_lower:
-                mot_cle_img = "storefront,signage"
-            elif "chantier" in sujet_lower:
-                mot_cle_img = "construction,sign"
-            elif "vitrine" in sujet_lower:
-                mot_cle_img = "storefront,window"
-            elif "restaurant" in sujet_lower or "menu" in sujet_lower:
-                mot_cle_img = "restaurant,menu"
-            elif "flyer" in sujet_lower or "brochure" in sujet_lower:
-                mot_cle_img = "flyer,brochure,printing"
-            elif "véhicule" in sujet_lower or "marquage" in sujet_lower:
-                mot_cle_img = "carwraps,vehiclebranding"
+        if texte_json:
+            try:
+                donnees_nl = NewsletterReponse.model_validate_json(texte_json)
+                st.success("✅ Newsletter rédigée par l'IA !")
+                st.info(f"**Sujet traité :** {sujet_final}")
                 
-            url_image_internet = f"https://loremflickr.com/800/400/{mot_cle_img}"
-            st.image(url_image_internet, caption=f"Illustration associée au thème : {sujet_final}", use_container_width=True)
-            # ----------------------------------------------------
+                # Récupération dynamique de l'image grâce au choix de l'IA
+                mots_anglais_propre = donnees_nl.mot_cle_image.replace(" ", ",")
+                url_image_internet = f"https://loremflickr.com/800/400/{mots_anglais_propre}"
+                
+                st.image(url_image_internet, caption=f"Illustration choisie par l'IA (Mots-clés : {donnees_nl.mot_cle_image})", use_container_width=True)
+                st.text_area("Copie-colle ce texte sur LinkedIn :", value=donnees_nl.texte_newsletter, height=450)
+                
+            except Exception as e:
+                st.error(f"Erreur de lecture de la réponse IA : {e}")
 
-            st.text_area("Copie-colle ce texte sur LinkedIn :", value=texte_genere, height=450)
         else:
             st.error(f"❌ L'IA n'a pas pu répondre. Détail : {erreur}")
 

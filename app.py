@@ -118,7 +118,7 @@ def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.85):
 
     for cycle in range(1, 4):
         for modele in list(modeles_actifs):
-            zone_statut.info(f"⏳ L'IA analyse et rédige sur mesure (essai {cycle}/3 — {modele})... 20 sec max.")
+            zone_statut.info(f"⏳ L'IA analyse et rédige sur mesure (essai {cycle}/3 — {model})... 20 sec max.")
             executor = ThreadPoolExecutor(max_workers=1)
             futur = executor.submit(_appel_unique_ia, modele, prompt, config_args)
             try:
@@ -327,7 +327,6 @@ def chercher_entreprises_pool(
     if mode_zone:
         _, cps_gps, code_dept = identifier_commune_gps(zone_lat, zone_lon)
 
-        # 1. Si un mot-clé est renseigné, on cherche d'abord par mot-clé dans le département et on filtre dans le cercle GPS
         if not tous_types and mots_cles_list and code_dept:
             url_search = "https://recherche-entreprises.api.gouv.fr/search"
             requetes_q = [mot_cle.strip()] if len(mots_cles_list) > 1 else []
@@ -355,7 +354,6 @@ def chercher_entreprises_pool(
                 if len(vivier_brut) >= 35:
                     break
 
-        # 2. On complète (ou on cherche si "Tous types d'activités") avec le radar GPS local /near_point
         if tous_types or len(vivier_brut) < 15:
             url_geo = "https://recherche-entreprises.api.gouv.fr/near_point"
             pages_geo = [1, 2, random.randint(3, 5)] if renouveler else [1, 2, 3]
@@ -384,7 +382,6 @@ def chercher_entreprises_pool(
 
         for cp in codes:
             if not tous_types and mots_cles_list:
-                # 1. Recherche ciblée sur l'expression puis sur chaque mot-clé significatif
                 requetes_q = [mot_cle.strip()] if len(mots_cles_list) > 1 else []
                 requetes_q.extend(mots_cles_list)
                 for terme in dict.fromkeys(requetes_q):
@@ -415,7 +412,6 @@ def chercher_entreprises_pool(
                     except Exception:
                         pass
 
-            # 2. Si "Tous types" OU si le mot-clé était une idée large (ex: "commerces avec vitrine"), on charge un large panel local
             if tous_types or len(vivier_brut) < 8:
                 pages_larges = [1, 2] if not renouveler else [1, random.randint(2, 4)]
                 for p_large in dict.fromkeys(pages_larges):
@@ -533,6 +529,29 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
         if texte_genere:
             st.success("✅ Newsletter rédigée par l'IA !")
             st.info(f"**Sujet traité :** {sujet_final}")
+            
+            # --- AJOUT DE L'IMAGE INTERNET ASSOCIÉE AU THÈME ---
+            mot_cle_img = "printing,signage,businesscard"
+            sujet_lower = sujet_final.lower()
+            if "carte" in sujet_lower:
+                mot_cle_img = "businesscard,printing"
+            elif "enseigne" in sujet_lower or "logo" in sujet_lower:
+                mot_cle_img = "storefront,signage"
+            elif "chantier" in sujet_lower:
+                mot_cle_img = "construction,sign"
+            elif "vitrine" in sujet_lower:
+                mot_cle_img = "storefront,window"
+            elif "restaurant" in sujet_lower or "menu" in sujet_lower:
+                mot_cle_img = "restaurant,menu"
+            elif "flyer" in sujet_lower or "brochure" in sujet_lower:
+                mot_cle_img = "flyer,brochure,printing"
+            elif "véhicule" in sujet_lower or "marquage" in sujet_lower:
+                mot_cle_img = "carwraps,vehiclebranding"
+                
+            url_image_internet = f"https://loremflickr.com/800/400/{mot_cle_img}"
+            st.image(url_image_internet, caption=f"Illustration associée au thème : {sujet_final}", use_container_width=True)
+            # ----------------------------------------------------
+
             st.text_area("Copie-colle ce texte sur LinkedIn :", value=texte_genere, height=450)
         else:
             st.error(f"❌ L'IA n'a pas pu répondre. Détail : {erreur}")
@@ -765,7 +784,6 @@ MISSION :
                             note_propre = round(item.note_pertinence / 10) if item.note_pertinence > 10 else item.note_pertinence
                             note_propre = max(1, min(10, note_propre))
 
-                            # Lorsque un mot-clé précis est demandé, on écarte toute entreprise jugée peu pertinente (< 5/10)
                             if (not tous_types) and note_propre < 5:
                                 continue
 
@@ -803,7 +821,6 @@ MISSION :
 
                         st.dataframe(tableau, use_container_width=True)
 
-                        # Export CSV pour Excel
                         buffer_csv = io.StringIO()
                         writer = csv.DictWriter(buffer_csv, fieldnames=tableau[0].keys(), delimiter=";")
                         writer.writeheader()
@@ -815,7 +832,6 @@ MISSION :
                             mime="text/csv"
                         )
 
-                        # Carte des résultats avec les NOMS figés juste au-dessus des points
                         if marqueurs_carte:
                             st.subheader("🗺️ Localisation et noms des prospects trouvés")
                             centre_lat = sum(m["lat"] for m in marqueurs_carte) / len(marqueurs_carte)

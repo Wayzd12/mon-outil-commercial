@@ -16,7 +16,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 # 1. CONFIGURATION DE LA PAGE
-st.set_page_config(page_title="Tableau de Bord Imprimerie", page_icon="🖨️", layout="wide")
+st.set_page_config(page_title="Tableau de Bord Commercial", page_icon="💹", layout="wide")
 
 # --- 2. VERROU PAR MOT DE PASSE ---
 MOT_DE_PASSE_SECRET = "outilcommercial4321"  # <-- Remets ton mot de passe ici
@@ -25,7 +25,7 @@ if "connecte" not in st.session_state:
     st.session_state["connecte"] = False
 
 if not st.session_state["connecte"]:
-    st.title("🔒 Espace Privé — Imprimerie & Signalétique")
+    st.title("🔒 Espace Privé — Plan commercial & Aide Générative")
     mdp_saisi = st.text_input("Entre le mot de passe pour accéder aux outils :", type="password")
     if st.button("Déverrouiller"):
         if mdp_saisi == MOT_DE_PASSE_SECRET:

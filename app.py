@@ -71,8 +71,8 @@ def recuperer_image_ia_securisee(prompt):
     
     for essai in range(2):
         try:
-            # On laisse jusqu'à 20 secondes pour que le serveur de l'IA ait le temps de générer l'image
-            rep = requests.get(url, timeout=20)
+            # On laisse jusqu'à 30 secondes pour que le serveur de l'IA ait le temps de générer l'image
+            rep = requests.get(url, timeout=30)
             
             # On vérifie que la réponse est bien un succès HTTP et que c'est bien une image
             if rep.status_code == 200 and rep.headers.get('content-type', '').startswith('image/'):

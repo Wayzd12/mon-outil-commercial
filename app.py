@@ -65,18 +65,23 @@ def charger_reglages():
     return donnees
 
 def recuperer_image_ia_securisee(prompt):
-    """Tente de récupérer l'image IA avec 3 essais max et 3 secondes d'attente entre chaque essai."""
+    """Tente de récupérer l'image IA avec un vrai délai d'attente et 2 essais max."""
     prompt_encoded = urllib.parse.quote(prompt)
     url = f"https://pollinations.ai/p/{prompt_encoded}?width=600&height=600&nologo=true&seed={random.randint(1, 10000)}"
     
-    for essai in range(3):
+    for essai in range(2):
         try:
-            rep = requests.get(url, timeout=6)
-            if rep.status_code == 200 and len(rep.content) > 1000:
-                return rep.content  # Retourne les octets de l'image si réussi
+            # On laisse jusqu'à 20 secondes pour que le serveur de l'IA ait le temps de générer l'image
+            rep = requests.get(url, timeout=20)
+            
+            # On vérifie que la réponse est bien un succès HTTP et que c'est bien une image
+            if rep.status_code == 200 and rep.headers.get('content-type', '').startswith('image/'):
+                return rep.content  # Succès ! On renvoie l'image
         except Exception:
             pass
-        time.sleep(3)  # Attends 3 secondes avant de relancer si les serveurs sont occupés
+            
+        time.sleep(2)  # Petite pause de 2 secondes avant de retenter si le premier essai a échoué
+        
     return None
 
 def sauvegarder_reglages_sur_disque(nouveaux_reglages: dict):

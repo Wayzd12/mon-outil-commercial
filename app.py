@@ -190,7 +190,8 @@ class ListeAnalyses(BaseModel):
 
 class NewsletterReponse(BaseModel):
     texte_newsletter: str = Field(description="Le texte complet et prêt à publier de la newsletter")
-    prompt_image_ia: str = Field(description="Une description en anglais très détaillée, créative et originale d'un schéma explicatif, d'une infographie ou d'une illustration rigolote en lien direct avec le texte de la newsletter")
+    prompt_image_produit: str = Field(description="Description détaillée en anglais montrant le produit d'imprimerie fini, élégant ou le résultat professionnel idéal (le côté 'après' / solution)")
+    prompt_image_humour: str = Field(description="Description détaillée en anglais d'une illustration créative, humoristique ou métaphorique en lien avec la situation initiale ou la blague du texte (le côté 'avant' / problème)")
 
 
 def calculer_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -545,16 +546,20 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                     st.text_area("Copie-colle ce texte sur LinkedIn :", value=donnees_nl.texte_newsletter, height=500)
                 
                 with col_images:
-                    st.subheader("🎨 Illustration sur mesure (IA)")
+                    st.subheader("🖼️ Visuels Avant / Après (IA)")
                     
-                    # On encode la description de l'IA pour le générateur d'images
                     import urllib.parse
-                    prompt_encoded = urllib.parse.quote(donnees_nl.prompt_image_ia)
                     
-                    # Le paramètre seed aléatoire garantit une image 100% nouvelle et unique à chaque fois
-                    url_image_ia = f"https://pollinations.ai/p/{prompt_encoded}?width=800&height=500&nologo=true&seed={random.randint(1, 10000)}"
+                    # 1. Image du Produit / Solution (Après)
+                    prompt_prod_encoded = urllib.parse.quote(donnees_nl.prompt_image_produit)
+                    url_img_prod = f"https://pollinations.ai/p/{prompt_prod_encoded}?width=800&height=450&nologo=true&seed={random.randint(1, 10000)}"
+                    st.image(url_img_prod, caption="✨ Après (Le produit / La solution)", use_container_width=True)
                     
-                    st.image(url_image_ia, caption=f"Idée visuelle de l'IA : {donnees_nl.prompt_image_ia}", use_container_width=True)
+                    # 2. Image de l'Humour / Situation (Avant)
+                    prompt_hum_encoded = urllib.parse.quote(donnees_nl.prompt_image_humour)
+                    url_img_hum = f"https://pollinations.ai/p/{prompt_hum_encoded}?width=800&height=450&nologo=true&seed={random.randint(1, 10000)}"
+                    st.image(url_img_hum, caption="💡 Avant (La situation / Illustration décalée)", use_container_width=True)
+
                 
             except Exception as e:
                 st.error(f"Erreur de lecture de la réponse IA : {e}")

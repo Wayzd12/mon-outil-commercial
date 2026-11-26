@@ -64,24 +64,40 @@ def charger_reglages():
             pass
     return donnees
 
-def recuperer_image_ia_securisee(prompt):
-    """Tente de récupérer l'image IA avec un vrai délai d'attente et 2 essais max."""
-    prompt_encoded = urllib.parse.quote(prompt)
-    url = f"https://pollinations.ai/p/{prompt_encoded}?width=600&height=600&nologo=true&seed={random.randint(1, 10000)}"
+def recuperer_image_ia_securisee(prompt_image, max_tentatives=3):
+    import urllib.parse
+    import requests
+    import time
     
-    for essai in range(2):
-        try:
-            # On laisse jusqu'à 30 secondes pour que le serveur de l'IA ait le temps de générer l'image
-            rep = requests.get(url, timeout=30)
-            
-            # On vérifie que la réponse est bien un succès HTTP et que c'est bien une image
-            if rep.status_code == 200 and rep.headers.get('content-type', '').startswith('image/'):
-                return rep.content  # Succès ! On renvoie l'image
-        except Exception:
-            pass
-            
-        time.sleep(2)  # Petite pause de 2 secondes avant de retenter si le premier essai a échoué
+    encoded_prompt = urllib.parse.quote(prompt_image)
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&nologo=true"
+    
+    # Conteneur visuel pour suivre l'état de l'image en direct
+    status_box = st.empty()
+    
+    for tentative in range(1, max_tentatives + 1):
+        status_box.info(f"🎨 Génération de l'image IA en cours (Tentative {tentative}/{max_tentatives})... Patience, Pollinations chauffe les pinceaux 🖌️")
         
+        try:
+            # On laisse un délai progressif ou fixe entre les essais
+            time.sleep(2)
+            response = requests.get(url, timeout=30)
+            
+            # On vérifie que la réponse est un succès et que le contenu pèse assez lourd pour être une vraie image
+            if response.status_code == 200 and len(response.content) > 5000:
+                status_box.success("✅ Image IA générée avec succès !")
+                time.sleep(1)
+                status_box.empty() # On efface le message de statut propre
+                return url
+        except Exception as e:
+            pass
+        
+        status_box.warning(f"⚠️ Tentative {tentative} un peu lente... Nouvelle tentative dans 3 secondes...")
+        time.sleep(3)
+        
+    status_box.error("❌ L'image IA n'a pas pu être récupérée (serveur Pollinations saturé).")
+    time.sleep(2)
+    status_box.empty()
     return None
 
 def sauvegarder_reglages_sur_disque(nouveaux_reglages: dict):
@@ -593,7 +609,15 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                         import base64
                         encoded_img = base64.b64encode(img_bytes).decode('utf-8')
                         src_ia = f"data:image/jpeg;base64,{encoded_img}"
-                    
+                    # Affichage propre des visuels dans la colonne de droite (sans dépassement)
+                    if src_ia:
+                        st.image(src_ia, caption="Visuel IA", use_container_width=True)
+                    else:
+                        st.info("Visuel IA indisponible.")
+                        
+                    if url_img_pro:
+                        st.image(url_img_pro, caption="Visuel Professionnel", use_container_width=True)
+                        
                     # Affichage côte à côte propre via HTML, sans aucune légende
                     if src_ia:
                         html_images = f"""

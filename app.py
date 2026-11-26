@@ -160,6 +160,7 @@ def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.85):
     # On ajoute thinking_config pour forcer le modèle Flash à réfléchir en profondeur
     config_args = {
         "temperature": temperature,
+        "max_output_tokens": 16384,
         "thinking_config": {
             "thinking_budget": 4096
         }

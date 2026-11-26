@@ -547,11 +547,11 @@ with tab1:
     )
 
     with st.expander("⚙️ Paramètres du style et de la structure de la newsletter"):
-        p_identite = st.text_input("Identité de l'expéditeur :", value=reglages["p_identite"], key="nl_p_identite")
-        p_style = st.text_input("Style d'écriture :", value=reglages["p_style"], key="nl_p_style")
-        p_intro = st.text_area("Consigne Introduction :", value=reglages["p_intro"], key="nl_p_intro")
-        p_corps = st.text_area("Consigne Développement (3 conseils) :", value=reglages["p_corps"], key="nl_p_corps")
-        p_conclusion = st.text_area("Consigne Conclusion :", value=reglages["p_conclusion"], key="nl_p_conclusion")
+        p_identite = st.text_input("Identité de l'expéditeur :", value="Imprimerie Centre DIGITALIS Agglomération (34130 Mudaison)", key="nl_p_identite")
+        p_style = st.text_input("Style d'écriture :", value="Chaleureux, concret, direct, comme un artisan-conseil local", key="nl_p_style")
+        p_intro = st.text_area("Consigne Introduction :", value="Commence par un titre accrocheur, puis une ligne '---'. Rédige une intro de 3 lignes max ancrée à Mudaison, puis '---'.", key="nl_p_intro")
+        p_corps = st.text_area("Consigne Développement (3 conseils) :", value="Propose 3 conseils commençant par un émoji (ex: 💡), séparés par '---', avec une ligne en gras '**Ce que ça change pour vous :**'.", key="nl_p_corps")
+        p_conclusion = st.text_area("Consigne Conclusion :", value="Termine par '---', puis 2 lignes de conclusion positives et une question ouverte.", key="nl_p_conclusion")
 
     st.markdown("---")
     

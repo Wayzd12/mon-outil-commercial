@@ -40,16 +40,16 @@ if not st.session_state["connecte"]:
 FICHIER_REGLAGES = "mes_reglages_imprimerie.json"
 
 REGLAGES_PAR_DEFAUT = {
-    "p_identite": "Imprimerie moderne (cartes de visite, flyers, brochures, menus, affiches, enseignes de façade, logos sur bâtiment, vitrophanie, panneaux de chantier)",
+    "p_identite": "Imprimerie moderne basée au Centre DIGITALIS Agglomération (ZAE du Bosc – 8 Rue des Vergers, 34130 Mudaison) (cartes de visite, flyers, brochures, menus, affiches, enseignes de façade, vitrophanie, panneaux de chantier)",
     "p_style": "Chaleureux, concret, direct, comme un artisan-conseil local qui parle simplement sans jargon",
     "p_intro": "Commence par un titre accrocheur (moins de 65 caractères), puis une introduction de 3 lignes maximum qui part d'une situation vécue par les commerçants ou artisans locaux.",
     "p_corps": "Donne 3 conseils pratiques et actionnables liés à l'impression ou la signalétique. Pour chaque conseil, ajoute une ligne en gras '**Ce que ça change pour vous :**'.",
     "p_conclusion": "Termine par 2 lignes de conclusion positives et une question ouverte simple pour inciter les lecteurs à commenter.",
-    "prosp_offre": "Impression petit et grand format : cartes de visite, flyers, brochures, menus, étiquettes, enseignes de façade, logos en relief, vitrophanie, panneaux de chantier, marquage véhicule",
-    "prosp_consignes": "1. Tiens compte de la localisation précise ({lieu_cible}) et de l'adresse exacte de chaque entreprise.\n2. Sélectionne uniquement les entreprises qui ont un vrai rapport avec le thème demandé (en décodant leur code activité NAF et leur nom).\n3. Adapte le produit recommandé à l'emplacement (avenue/zone = grande enseigne ou panneau ; rue commerçante = vitrine, flyers ou menus ; artisan = panneaux de chantier et cartes de visite) et à l'année de création (récente = pack création ; ancienne = modernisation).\n4. Écris un message LinkedIn court (max 230 caractères), poli, ancré localement sur {lieu_cible} et jamais répétitif d'une ligne à l'autre.\n5. Ne sélectionne que des entreprises encore ouvertes ( prend en compte le bâtiment choisi et non pas le siège de l'entreprise ) , tu ne dois pas sélectionner d'entreprises qui ont fermés ( toujours le bâtiment choisi )",
-    "codes_postaux": "34670",
-    "zone_lat": 43.6667,
-    "zone_lon": 4.0303,
+    "prosp_offre": "Impression petit et grand format depuis notre atelier du Centre DIGITALIS Agglomération à Mudaison : cartes de visite, flyers, brochures, menus, enseignes, vitrophanie, panneaux de chantier",
+    "prosp_consignes": "1. Tiens compte de la localisation précise ({lieu_cible}) et de l'adresse exacte de chaque entreprise.\n2. Sélectionne uniquement les entreprises en rapport avec le thème demandé.\n3. Dans le message LinkedIn (max 230 caractères), positionne-toi clairement comme un **voisin immédiat basé à Mudaison (ZAE du Bosc)** pour créer un ancrage local fort.\n4. Adapte le produit recommandé à l'emplacement et à l'année de création.\n5. Ne sélectionne que des entreprises ouvertes.",
+    "codes_postaux": "34130",
+    "zone_lat": 43.6440,  # Latitude centrée sur Mudaison
+    "zone_lon": 4.0440,   # Longitude centrée sur Mudaison
     "rayon_km": 10
 }
 

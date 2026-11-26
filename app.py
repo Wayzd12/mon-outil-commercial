@@ -1011,6 +1011,4 @@ MISSION :
                     st.warning("L'IA n'a retenu aucune entreprise sur cette tentative. Clique à nouveau sur Rechercher.")
                 else:
                     st.warning(f"Aucune entreprise en rapport avec « {theme_recherche} » n'a été trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou d'utiliser un mot-clé plus général.")
-
-                except Exception as e:
-                    st.error(f"Erreur de lecture de la réponse IA : {e}")
+                    

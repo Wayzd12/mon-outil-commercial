@@ -52,7 +52,6 @@ REGLAGES_PAR_DEFAUT = {
     
     # Consigne de conclusion claire
     "p_conclusion": "Termine par une ligne '---', puis 2 lignes de conclusion positives suivies d'une question ouverte simple pour inciter à réagir."
-}
 
     "prosp_offre": "Impression petit et grand format depuis notre atelier du Centre DIGITALIS Agglomération à Mudaison : cartes de visite, flyers, brochures, menus, enseignes, vitrophanie, panneaux de chantier",
     "prosp_consignes": "1. Tiens compte de la localisation précise ({lieu_cible}) et de l'adresse exacte de chaque entreprise.\n2. Sélectionne uniquement les entreprises en rapport avec le thème demandé.\n3. Dans le message LinkedIn (max 230 caractères), positionne-toi clairement comme un **voisin immédiat basé à Mudaison (ZAE du Bosc)** pour créer un ancrage local fort.\n4. Adapte le produit recommandé à l'emplacement et à l'année de création.\n5. Ne sélectionne que des entreprises ouvertes.",

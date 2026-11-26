@@ -241,6 +241,7 @@ class ProspectSelectionne(BaseModel):
     produit_imprimerie: str
     message_linkedin: str
     objet_email: str
+    projet_chantier: str
 
 class ListeAnalyses(BaseModel):
     resultats: list[ProspectSelectionne]
@@ -885,7 +886,8 @@ MISSION :
 {regle_selection}
 2. Pour chaque entreprise retenue de ce lot, indique son numéro exact (`numero_entreprise` entre {lot_num_debut} et {lot_num_debut + len(lot_vivier) - 1}).
 3. Explique en 1 phrase simple ce que fait cette entreprise (`interpretation_activite`).
-4. Donne une note stricte sur 10 et applique ces consignes :
+4. **Détecte si l'entreprise a un projet, un chantier en cours, des travaux ou une ouverture récente/future** (`projet_chantier`). Si rien n'indique un projet particulier, écris "Pas de chantier/projet visible".
+5. Donne une note stricte sur 10 et applique ces consignes :
 {consignes_interpretees}"""
 
                 texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.75)
@@ -918,6 +920,7 @@ MISSION :
                     ligne_tab = {
                         "Entreprise": ent["nom"],
                         "Activité détectée": item.interpretation_activite,
+                        "Projet / Chantier": item.projet_chantier,
                         "Créée en": ent["creation"],
                         "Adresse locale": ent["adresse"],
                         "Note /10": note_propre,

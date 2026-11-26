@@ -837,155 +837,180 @@ with tab2:
         if not vivier:
             st.error(f"Aucune entreprise trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou de vérifier le code postal.")
         else:
-            lignes_vivier = []
-            for idx, ent in enumerate(vivier, start=1):
-                dist_txt = f" | Distance: {ent['distance_km']} km" if ent.get("distance_km") is not None else ""
-                lignes_vivier.append(
-                    f"{idx}. Nom: {ent['nom']} | Code NAF: {ent['naf']} | Créée en: {ent['creation']} | Adresse locale: {ent['adresse']}{dist_txt}"
+            # --- PARAMÉTRAGE DU BATCHING (LOTS DE 10) ---
+            nb_cibles = min(limite, len(vivier))
+            taille_lot = 10
+            tous_resultats_bruts = []
+            
+            progress_bar = st.progress(0, text="🚀 Lancement de l'analyse par lots...")
+
+            # Boucle de batching
+            for i in range(0, nb_cibles, taille_lot):
+                lot_vivier = vivier[i:i + taille_lot]
+                lot_num_debut = i + 1
+                
+                lignes_vivier = []
+                for idx_relatif, ent in enumerate(lot_vivier, start=lot_num_debut):
+                    dist_txt = f" | Distance: {ent['distance_km']} km" if ent.get("distance_km") is not None else ""
+                    lignes_vivier.append(
+                        f"{idx_relatif}. Nom: {ent['nom']} | Code NAF: {ent['naf']} | Créée en: {ent['creation']} | Adresse locale: {ent['adresse']}{dist_txt}"
+                    )
+
+                if tous_types:
+                    regle_selection = f"""1. L'utilisateur a coché "TOUS TYPES D'ACTIVITÉS" : sélectionne toutes les entreprises valides de ce lot (jusqu'à {len(lot_vivier)}), de manière totalement diversifiée dans la liste fournie."""
+                else:
+                    regle_selection = f"""1. RÈGLE DE SÉLECTION DES PROSPECTS : Analyse ce lot d'entreprises (numéros {lot_num_debut} à {lot_num_debut + len(lot_vivier) - 1}).
+- Inspecte attentivement le nom et le code NAF de chaque entreprise.
+- Sélectionne en priorité les entreprises ayant un rapport réel avec le thème : '{theme_recherche}'."""
+
+                consignes_interpretees = (
+                    prosp_consignes
+                    .replace("{lieu_cible}", lieu_cible)
+                    .replace("{rayon_km}", str(rayon_km))
                 )
 
-            if tous_types:
-                regle_selection = f"""1. L'utilisateur a coché "TOUS TYPES D'ACTIVITÉS" : sélectionne jusqu'à {min(limite, len(vivier))} entreprises de TOUT TYPE d'activité (sans aucune restriction sectorielle), de manière totalement diversifiée dans la liste fournie."""
-            else:
-                regle_selection = f"""1. RÈGLE DE SÉLECTION DES PROSPECTS : L'objectif est d'atteindre {nb_prospects} prospects détaillés.
-- Inspecte attentivement le nom et le code NAF de chaque entreprise.
-- Priorise en premier les entreprises ayant un rapport réel avec le thème : '{theme_recherche}'.
-- Si le vivier de prospects pertinents est épuisé avant d'arriver à {nb_prospects}, tu peux compléter la liste avec d'autres entreprises du vivier (même si elles ont moins de rapport avec le thème), mais tu dois le préciser clairement dans leur description.
-- Prends tout ton temps pour structurer ta réponse, aucune précipitation n'est requise. Sois exhaustif."""
-                regle_selection += """
-- Prends tout ton temps pour structurer ta réponse, aucune précipitation n'est requise. Sois exhaustif et rigoureux dans l'analyse."""
-            
-            consignes_interpretees = (
-                prosp_consignes
-                .replace("{lieu_cible}", lieu_cible)
-                .replace("{rayon_km}", str(rayon_km))
-            )
-
-            prompt_prospection = f"""Tu es le directeur commercial d'une entreprise spécialisée dans : {prosp_offre}.
+                prompt_prospection = f"""Tu es le directeur commercial d'une entreprise spécialisée dans : {prosp_offre}.
 
 CONTEXTE GÉOGRAPHIQUE DE LA RECHERCHE :
 L'utilisateur cible précisément : {lieu_cible}.
-Voici une liste de {len(vivier)} vraies entreprises locales ayant un établissement actif sur place :
+Voici un sous-ensemble de {len(lot_vivier)} entreprises locales (Lot {(i // taille_lot) + 1}) :
 {chr(10).join(lignes_vivier)}
 
 MISSION :
 {regle_selection}
-2. Pour chaque entreprise retenue, indique son numéro exact (`numero_entreprise` entre 1 et {len(vivier)}).
+2. Pour chaque entreprise retenue de ce lot, indique son numéro exact (`numero_entreprise` entre {lot_num_debut} et {lot_num_debut + len(lot_vivier) - 1}).
 3. Explique en 1 phrase simple ce que fait cette entreprise (`interpretation_activite`).
-4. Donne une note stricte sur 10 (entre 1 et 10, jamais sur 100 — mets moins de 5 si le rapport avec '{theme_recherche}' est trop faible) et applique ces consignes :
+4. Donne une note stricte sur 10 (entre 1 et 10) et applique ces consignes :
 {consignes_interpretees}"""
 
-            texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.75)
+                # Appel de l'IA pour le lot en cours
+                texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.75)
 
-            if not texte_json:
-                st.error(f"❌ L'IA n'a pas pu analyser les prospects. Détail : {erreur_ia}")
-            else:
-                try:
-                    donnees = ListeAnalyses.model_validate_json(texte_json)
-                    tableau = []
-                    marqueurs_carte = []
+                if texte_json:
+                    try:
+                        donnees_lot = ListeAnalyses.model_validate_json(texte_json)
+                        tous_resultats_bruts.extend(donnees_lot.resultats)
+                    except Exception as e:
+                        st.warning(f"⚠️ Erreur de décodage JSON sur le lot {(i // taille_lot) + 1} : {e}")
+                else:
+                    st.warning(f"⚠️ Échec sur le lot {(i // taille_lot) + 1} : {erreur_ia}")
 
-                    for item in donnees.resultats:
-                        index_reel = item.numero_entreprise - 1
-                        if 0 <= index_reel < len(vivier):
-                            note_propre = round(item.note_pertinence / 10) if item.note_pertinence > 10 else item.note_pertinence
-                            note_propre = max(1, min(10, note_propre))
+                # Mise à jour de la barre de progression
+                progres = min(1.0, (i + taille_lot) / nb_cibles)
+                progress_bar.progress(progres, text=f"Analyse en cours... Lot {(i // taille_lot) + 1} traité sur {math.ceil(nb_cibles / taille_lot)}.")
 
-                            if (not tous_types) and note_propre < 5:
-                                continue
+            progress_bar.empty()
 
-                            ent = vivier[index_reel]
-                            ligne_tab = {
-                                "Entreprise": ent["nom"],
-                                "Activité détectée": item.interpretation_activite,
-                                "Créée en": ent["creation"],
-                                "Adresse locale": ent["adresse"],
-                                "Note /10": note_propre,
-                                "Produit à proposer": item.produit_imprimerie,
-                                "Message LinkedIn": item.message_linkedin,
-                                "Objet Email": item.objet_email
-                            }
-                            if ent.get("distance_km") is not None:
-                                ligne_tab["Distance"] = f"{ent['distance_km']} km"
-                            tableau.append(ligne_tab)
+            # --- CONSOLIDATION ET AFFICHAGE FINAL ---
+            tableau = []
+            marqueurs_carte = []
 
-                            if ent.get("lat") and ent.get("lon"):
-                                marqueurs_carte.append({
-                                    "lat": ent["lat"],
-                                    "lon": ent["lon"],
-                                    "nom": ent["nom"],
-                                    "adresse": ent["adresse"],
-                                    "produit": item.produit_imprimerie,
-                                    "note": note_propre
-                                })
+            for item in tous_resultats_bruts:
+                index_reel = item.numero_entreprise - 1
+                if 0 <= index_reel < len(vivier):
+                    note_propre = round(item.note_pertinence / 10) if item.note_pertinence > 10 else item.note_pertinence
+                    note_propre = max(1, min(10, note_propre))
 
-                    if tableau:
-                        tableau.sort(key=lambda x: x["Note /10"], reverse=True)
-                        st.success(f"✅ {len(tableau)} prospect(s) pertinent(s) trouvé(s) sur {lieu_cible} !")
+                    if (not tous_types) and note_propre < 5:
+                        continue
 
-                        if (not tous_types) and len(tableau) < limite:
-                            st.info(f"ℹ️ Seulement {len(tableau)} entreprise(s) correspondent réellement à « {theme_recherche} » dans cette zone (les entreprises sans rapport ont été écartées).")
+                    ent = vivier[index_reel]
+                    ligne_tab = {
+                        "Entreprise": ent["nom"],
+                        "Activité détectée": item.interpretation_activite,
+                        "Créée en": ent["creation"],
+                        "Adresse locale": ent["adresse"],
+                        "Note /10": note_propre,
+                        "Produit à proposer": item.produit_imprimerie,
+                        "Message LinkedIn": item.message_linkedin,
+                        "Objet Email": item.objet_email
+                    }
+                    if ent.get("distance_km") is not None:
+                        ligne_tab["Distance"] = f"{ent['distance_km']} km"
+                    tableau.append(ligne_tab)
 
-                        st.dataframe(tableau, use_container_width=True)
+                    if ent.get("lat") and ent.get("lon"):
+                        marqueurs_carte.append({
+                            "lat": ent["lat"],
+                            "lon": ent["lon"],
+                            "nom": ent["nom"],
+                            "adresse": ent["adresse"],
+                            "produit": item.produit_imprimerie,
+                            "note": note_propre
+                        })
 
-                        buffer_csv = io.StringIO()
-                        writer = csv.DictWriter(buffer_csv, fieldnames=tableau[0].keys(), delimiter=";")
-                        writer.writeheader()
-                        writer.writerows(tableau)
-                        st.download_button(
-                            label="📥 Télécharger ce tableau pour Excel (.csv)",
-                            data=buffer_csv.getvalue().encode("utf-8-sig"),
-                            file_name="prospection_imprimerie.csv",
-                            mime="text/csv"
+            if tableau:
+                # Tri par note décroissante
+                tableau.sort(key=lambda x: x["Note /10"], reverse=True)
+                st.success(f"✅ {len(tableau)} prospect(s) pertinent(s) trouvé(s) et consolidé(s) sur {lieu_cible} !")
+
+                if (not tous_types) and len(tableau) < limite:
+                    st.info(f"ℹ️ {len(tableau)} entreprise(s) correspondent réellement à « {theme_recherche} » dans cette zone.")
+
+                # Affichage du tableau Pandas
+                st.dataframe(tableau, use_container_width=True)
+
+                # Bouton de téléchargement CSV
+                buffer_csv = io.StringIO()
+                writer = csv.DictWriter(buffer_csv, fieldnames=tableau[0].keys(), delimiter=";")
+                writer.writeheader()
+                writer.writerows(tableau)
+                st.download_button(
+                    label="📥 Télécharger ce tableau pour Excel (.csv)",
+                    data=buffer_csv.getvalue().encode("utf-8-sig"),
+                    file_name="prospection_imprimerie.csv",
+                    mime="text/csv"
+                )
+
+                # Affichage de la carte Folium avec les résultats
+                if marqueurs_carte:
+                    st.subheader("🗺️ Localisation et noms des prospects trouvés")
+                    centre_lat = sum(m["lat"] for m in marqueurs_carte) / len(marqueurs_carte)
+                    centre_lon = sum(m["lon"] for m in marqueurs_carte) / len(marqueurs_carte)
+
+                    carte_resultats = folium.Map(location=[centre_lat, centre_lon], zoom_start=12)
+
+                    if st.session_state["mode_carte_zone"]:
+                        folium.Circle(
+                            location=[lat_actuelle, lon_actuelle],
+                            radius=rayon_km * 1000,
+                            color="#1f77b4",
+                            weight=1,
+                            fill=True,
+                            fill_opacity=0.08
+                        ).add_to(carte_resultats)
+
+                    for m in marqueurs_carte:
+                        fiche_html = (
+                            f"<b>{m['nom']}</b> (Note : {m['note']}/10)<br>"
+                            f"<i>{m['adresse']}</i><br><br>"
+                            f"<b>Idée :</b> {m['produit']}"
                         )
+                        folium.Marker(
+                            location=[m["lat"], m["lon"]],
+                            popup=folium.Popup(fiche_html, max_width=280),
+                            tooltip=folium.Tooltip(
+                                f"<b>{m['nom']}</b>",
+                                permanent=True,
+                                direction="top",
+                                sticky=False,
+                                offset=(0, -36)
+                            ),
+                            icon=folium.Icon(color="green", icon="briefcase", prefix="fa")
+                        ).add_to(carte_resultats)
 
-                        if marqueurs_carte:
-                            st.subheader("🗺️ Localisation et noms des prospects trouvés")
-                            centre_lat = sum(m["lat"] for m in marqueurs_carte) / len(marqueurs_carte)
-                            centre_lon = sum(m["lon"] for m in marqueurs_carte) / len(marqueurs_carte)
+                    st_folium(
+                        carte_resultats,
+                        height=460,
+                        use_container_width=True,
+                        returned_objects=[],
+                        key="carte_resultats_prospects"
+                    )
+            else:
+                if tous_types:
+                    st.warning("L'IA n'a retenu aucune entreprise sur cette tentative. Clique à nouveau sur Rechercher.")
+                else:
+                    st.warning(f"Aucune entreprise en rapport avec « {theme_recherche} » n'a été trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou d'utiliser un mot-clé plus général.")
 
-                            carte_resultats = folium.Map(location=[centre_lat, centre_lon], zoom_start=12)
-
-                            if st.session_state["mode_carte_zone"]:
-                                folium.Circle(
-                                    location=[lat_actuelle, lon_actuelle],
-                                    radius=rayon_km * 1000,
-                                    color="#1f77b4",
-                                    weight=1,
-                                    fill=True,
-                                    fill_opacity=0.08
-                                ).add_to(carte_resultats)
-
-                            for m in marqueurs_carte:
-                                fiche_html = (
-                                    f"<b>{m['nom']}</b> (Note : {m['note']}/10)<br>"
-                                    f"<i>{m['adresse']}</i><br><br>"
-                                    f"<b>Idée :</b> {m['produit']}"
-                                )
-                                folium.Marker(
-                                    location=[m["lat"], m["lon"]],
-                                    popup=folium.Popup(fiche_html, max_width=280),
-                                    tooltip=folium.Tooltip(
-                                        f"<b>{m['nom']}</b>",
-                                        permanent=True,
-                                        direction="top",
-                                        sticky=False,
-                                        offset=(0, -36)
-                                    ),
-                                    icon=folium.Icon(color="green", icon="briefcase", prefix="fa")
-                                ).add_to(carte_resultats)
-
-                            st_folium(
-                                carte_resultats,
-                                height=460,
-                                use_container_width=True,
-                                returned_objects=[],
-                                key="carte_resultats_prospects"
-                            )
-                    else:
-                        if tous_types:
-                            st.warning("L'IA n'a retenu aucune entreprise sur cette tentative. Clique à nouveau sur Rechercher.")
-                        else:
-                            st.warning(f"Aucune entreprise en rapport avec « {theme_recherche} » n'a été trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou d'utiliser un mot-clé plus général.")
                 except Exception as e:
                     st.error(f"Erreur de lecture de la réponse IA : {e}")

@@ -670,7 +670,7 @@ with tab2:
         )
         codes_postaux = st.text_input(
             "Code(s) postal(aux) :",
-            value=REGLAGES_PAR_DEFAUTS["codes_postaux"],
+            value=REGLAGES_PAR_DEFAUT["codes_postaux"],
             disabled=carte_active,
             help=aide_cp,
             key="input_codes_postaux"

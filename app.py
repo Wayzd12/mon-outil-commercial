@@ -547,11 +547,11 @@ with tab1:
     )
 
     with st.expander("⚙️ Paramètres du style et de la structure de la newsletter"):
-        p_identite = st.text_input("Identité de l'expéditeur :", value=reg["p_identite"], key="nl_p_identite")
-        p_style = st.text_input("Style d'écriture :", value=reg["p_style"], key="nl_p_style")
-        p_intro = st.text_area("Consigne Introduction :", value=reg["p_intro"], key="nl_p_intro")
-        p_corps = st.text_area("Consigne Développement (3 conseils) :", value=reg["p_corps"], key="nl_p_corps")
-        p_conclusion = st.text_area("Consigne Conclusion :", value=reg["p_conclusion"], key="nl_p_conclusion")
+        p_identite = st.text_input("Identité de l'expéditeur :", value=reglages["p_identite"], key="nl_p_identite")
+        p_style = st.text_input("Style d'écriture :", value=reglages["p_style"], key="nl_p_style")
+        p_intro = st.text_area("Consigne Introduction :", value=reglages["p_intro"], key="nl_p_intro")
+        p_corps = st.text_area("Consigne Développement (3 conseils) :", value=reglages["p_corps"], key="nl_p_corps")
+        p_conclusion = st.text_area("Consigne Conclusion :", value=reglages["p_conclusion"], key="nl_p_conclusion")
 
     st.markdown("---")
     

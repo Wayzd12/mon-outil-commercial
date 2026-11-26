@@ -802,7 +802,7 @@ with tab2:
 
             if tous_types:
                 regle_selection = f"""1. L'utilisateur a coché "TOUS TYPES D'ACTIVITÉS" : sélectionne jusqu'à {min(limite, len(vivier))} entreprises variées et pertinentes (commerces, artisans, sociétés locales) dans cette liste."""
-              else:
+            else:
             regle_selection = f"""1. RÈGLE DE SÉLECTION DES PROSPECTS : L'objectif est d'atteindre {nb_prospects} prospects détaillés.
    - Inspecte attentivement le nom et le code NAF de chaque entreprise.
    - Priorise en premier les entreprises ayant un rapport réel avec le thème : '{theme_recherche}'.

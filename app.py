@@ -774,12 +774,7 @@ with tab2:
         if villes_cp:
             st.caption(f"📍 **Variable de lieu détectée pour l'IA :** {', '.join(villes_cp[:6])} ({codes_postaux})")
 
-    col_opt1, col_opt2, col_opt3 = st.columns([2, 2, 2])
-    with col_opt1:
-        tous_types = st.checkbox(
-            "🌐 Tous types d'activités",
-            key="check_tous_types"
-        )
+
     with col_opt2:
         renouveler = st.checkbox(
             "🎲 Varier les entreprises à chaque recherche",

@@ -157,7 +157,14 @@ def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.85):
     zone_statut = st.empty()
     derniere_erreur = ""
 
-    config_args = {"temperature": temperature}
+    # On ajoute thinking_config pour forcer le modèle Flash à réfléchir en profondeur
+    config_args = {
+        "temperature": temperature,
+        "thinking_config": {
+            "thinking_budget": 4096
+        }
+    }
+    
     if schema is not None:
         config_args["response_mime_type"] = "application/json"
         config_args["response_schema"] = schema
@@ -167,15 +174,16 @@ def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.85):
             zone_statut.info(f"⏳ L'IA analyse et rédige sur mesure (essai {cycle}/3 — {modele})... 90 sec max selon le nombre de prospects.")
             executor = ThreadPoolExecutor(max_workers=1)
             futur = executor.submit(_appel_unique_ia, modele, prompt, config_args)
+
             try:
-                texte = futur.result(timeout=20)
+                texte = futur.result(timeout=90)
                 executor.shutdown(wait=False)
                 if texte:
                     zone_statut.empty()
                     return texte, None
             except Exception as e:
                 executor.shutdown(wait=False)
-                derniere_erreur = str(e) if str(e) else "Délai de 20 secondes dépassé"
+                derniere_erreur = str(e) if str(e) else "Délai de 90 secondes dépassé"
                 if "API_KEY_INVALID" in derniere_erreur or "API key not valid" in derniere_erreur:
                     zone_statut.empty()
                     return None, "Ta clé GEMINI_API_KEY dans les Secrets de Streamlit est invalide."

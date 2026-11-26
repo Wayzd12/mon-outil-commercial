@@ -172,7 +172,7 @@ def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.85):
 
     for cycle in range(1, 4):
         for modele in list(modeles_actifs):
-            zone_statut.info(f"⏳ L'IA analyse et rédige sur mesure (essai {cycle}/3 — {modele})... 90 sec max selon le nombre de prospects.")
+            zone_statut.info(f"⏳ L'IA analyse et rédige sur mesure (essai {cycle}/3 — {modele})... 90 sec max selon la demande.")
             executor = ThreadPoolExecutor(max_workers=1)
             futur = executor.submit(_appel_unique_ia, modele, prompt, config_args)
 

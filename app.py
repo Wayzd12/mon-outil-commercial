@@ -800,6 +800,16 @@ with tab2:
             st.success("✅ Tes réglages Prospection sont enregistrés !")
 
     if st.button("🔍 Rechercher, analyser et afficher sur la carte", type="primary"):
+    # --- GESTION DE LA MÉMOIRE DES RÉSULTATS DANS SESSION_STATE ---
+    if "tableau_prospects" not in st.session_state:
+        st.session_state["tableau_prospects"] = None
+    if "marqueurs_carte" not in st.session_state:
+        st.session_state["marqueurs_carte"] = []
+    if "lieu_dernier_resultat" not in st.session_state:
+        st.session_state["lieu_dernier_resultat"] = ""
+
+    # Bouton de recherche principale
+    if st.button("🔍 Rechercher, analyser et afficher sur la carte", type="primary"):
         lat_actuelle = float(st.session_state["reglages"]["zone_lat"])
         lon_actuelle = float(st.session_state["reglages"]["zone_lon"])
 
@@ -830,15 +840,15 @@ with tab2:
 
         if not vivier:
             st.error(f"Aucune entreprise trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou de vérifier le code postal.")
+            st.session_state["tableau_prospects"] = None
+            st.session_state["marqueurs_carte"] = []
         else:
-            # --- PARAMÉTRAGE DU BATCHING (LOTS DE 10) ---
             nb_cibles = min(limite, len(vivier))
             taille_lot = 10
             tous_resultats_bruts = []
             
             progress_bar = st.progress(0, text="🚀 Lancement de l'analyse par lots...")
 
-            # Boucle de batching
             for i in range(0, nb_cibles, taille_lot):
                 lot_vivier = vivier[i:i + taille_lot]
                 lot_num_debut = i + 1
@@ -874,10 +884,9 @@ MISSION :
 {regle_selection}
 2. Pour chaque entreprise retenue de ce lot, indique son numéro exact (`numero_entreprise` entre {lot_num_debut} et {lot_num_debut + len(lot_vivier) - 1}).
 3. Explique en 1 phrase simple ce que fait cette entreprise (`interpretation_activite`).
-4. Donne une note stricte sur 10 (entre 1 et 10) et applique ces consignes :
+4. Donne une note stricte sur 10 et applique ces consignes :
 {consignes_interpretees}"""
 
-                # Appel de l'IA pour le lot en cours
                 texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.75)
 
                 if texte_json:
@@ -885,17 +894,13 @@ MISSION :
                         donnees_lot = ListeAnalyses.model_validate_json(texte_json)
                         tous_resultats_bruts.extend(donnees_lot.resultats)
                     except Exception as e:
-                        st.warning(f"⚠️ Erreur de décodage JSON sur le lot {(i // taille_lot) + 1} : {e}")
-                else:
-                    st.warning(f"⚠️ Échec sur le lot {(i // taille_lot) + 1} : {erreur_ia}")
+                        pass
 
-                # Mise à jour de la barre de progression
                 progres = min(1.0, (i + taille_lot) / nb_cibles)
-                progress_bar.progress(progres, text=f"Analyse en cours... Lot {(i // taille_lot) + 1} traité sur {math.ceil(nb_cibles / taille_lot)}.")
+                progress_bar.progress(progres, text=f"Analyse en cours... Lot {(i // taille_lot) + 1} traité.")
 
             progress_bar.empty()
 
-            # --- CONSOLIDATION ET AFFICHAGE FINAL ---
             tableau = []
             marqueurs_carte = []
 
@@ -935,84 +940,107 @@ MISSION :
 
             if tableau:
                 tableau.sort(key=lambda x: x["Note /10"], reverse=True)
-                st.success(f"✅ {len(tableau)} prospect(s) pertinent(s) trouvé(s) et consolidé(s) sur {lieu_cible} !")
-
-                if (not tous_types) and len(tableau) < limite:
-                    st.info(f"ℹ️ {len(tableau)} entreprise(s) correspondent réellement à « {theme_recherche} » dans cette zone.")
-
-                # Ajout d'une colonne visuelle 📍 pour l'icône map dans le tableau
-                tableau_affichage = []
-                for row in tableau:
-                    r_copie = row.copy()
-                    r_copie["Map"] = "📍"
-                    tableau_affichage.append(r_copie)
-
-                st.dataframe(tableau_affichage, use_container_width=True)
-
-                buffer_csv = io.StringIO()
-                writer = csv.DictWriter(buffer_csv, fieldnames=tableau[0].keys(), delimiter=";")
-                writer.writeheader()
-                writer.writerows(tableau)
-                st.download_button(
-                    label="📥 Télécharger ce tableau pour Excel (.csv)",
-                    data=buffer_csv.getvalue().encode("utf-8-sig"),
-                    file_name="prospection_imprimerie.csv",
-                    mime="text/csv"
-                )
-
-                if marqueurs_carte:
-                    st.subheader("🗺️ Localisation et noms des prospects trouvés")
-                    
-                    # Sélecteur pour centrer la carte sur un prospect spécifique
-                    noms_prospects = [m["nom"] for m in marqueurs_carte]
-                    choix_centrage = st.selectbox("🎯 Centrer rapidement la carte sur un prospect :", ["-- Vue globale de la zone --"] + noms_prospects)
-                    
-                    if choix_centrage != "-- Vue globale de la zone --":
-                        prospect_cible = next(m for m in marqueurs_carte if m["nom"] == choix_centrage)
-                        centre_lat, centre_lon = prospect_cible["lat"], prospect_cible["lon"]
-                        zoom_carte = 16  # Zoom rapproché sur le prospect
-                    else:
-                        centre_lat = sum(m["lat"] for m in marqueurs_carte) / len(marqueurs_carte)
-                        centre_lon = sum(m["lon"] for m in marqueurs_carte) / len(marqueurs_carte)
-                        zoom_carte = 12
-
-                    carte_resultats = folium.Map(location=[centre_lat, centre_lon], zoom_start=zoom_carte)
-
-                    if st.session_state["mode_carte_zone"]:
-                        folium.Circle(
-                            location=[lat_actuelle, lon_actuelle],
-                            radius=rayon_km * 1000,
-                            color="#1f77b4",
-                            weight=1,
-                            fill=True,
-                            fill_opacity=0.08
-                        ).add_to(carte_resultats)
-
-                    for m in marqueurs_carte:
-                        fiche_html = (
-                            f"<b>{m['nom']}</b> (Note : {m['note']}/10)<br>"
-                            f"<i>{m['adresse']}</i><br><br>"
-                            f"<b>Idée :</b> {m['produit']}"
-                        )
-                        folium.Marker(
-                            location=[m["lat"], m["lon"]],
-                            popup=folium.Popup(fiche_html, max_width=280),
-                            # permanent=False pour n'afficher le nom qu'au survol / en s'approchant
-                            tooltip=folium.Tooltip(f"<b>{m['nom']}</b>", permanent=False),
-                            icon=folium.Icon(color="green", icon="briefcase", prefix="fa")
-                        ).add_to(carte_resultats)
-
-                    st_folium(
-                        carte_resultats,
-                        height=460,
-                        use_container_width=True,
-                        returned_objects=[],
-                        key="carte_resultats_prospects"
-                    )
-
+                # Sauvegarde persistante dans le session_state
+                st.session_state["tableau_prospects"] = tableau
+                st.session_state["marqueurs_carte"] = marqueurs_carte
+                st.session_state["lieu_dernier_resultat"] = lieu_cible
+                st.rerun()
             else:
-                if tous_types:
-                    st.warning("L'IA n'a retenu aucune entreprise sur cette tentative. Clique à nouveau sur Rechercher.")
-                else:
-                    st.warning(f"Aucune entreprise en rapport avec « {theme_recherche} » n'a été trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou d'utiliser un mot-clé plus général.")
-                    
+                st.warning("Aucune entreprise pertinente retenue sur cette tentative.")
+
+
+    # --- AFFICHAGE PERSISTANT DES RÉSULTATS (MÊME APRÈS UN CLIC) ---
+    if st.session_state["tableau_prospects"] is not None:
+        tableau = st.session_state["tableau_prospects"]
+        marqueurs_carte = st.session_state["marqueurs_carte"]
+        
+        st.success(f"✅ {len(tableau)} prospect(s) en mémoire.")
+
+        # Bouton pour supprimer/nettoyer explicitement les données
+        if st.button("🗑️ Supprimer les données obtenues"):
+            st.session_state["tableau_prospects"] = None
+            st.session_state["marqueurs_carte"] = []
+            st.rerun()
+
+        # Tableau avec colonne Map interactive 📍
+        tableau_affichage = []
+        for row in tableau:
+            r_copie = row.copy()
+            r_copie["Map"] = "📍"
+            tableau_affichage.append(r_copie)
+
+        # Sélection de ligne interactive pour centrer la carte sur le prospect
+        evenement_selection = st.dataframe(
+            tableau_affichage,
+            use_container_width=True,
+            selection_mode="single-row",
+            on_select="rerun",
+            key="table_prospects_select"
+        )
+
+        # Bouton CSV
+        buffer_csv = io.StringIO()
+        writer = csv.DictWriter(buffer_csv, fieldnames=tableau[0].keys(), delimiter=";")
+        writer.writeheader()
+        writer.writerows(tableau)
+        st.download_button(
+            label="📥 Télécharger ce tableau pour Excel (.csv)",
+            data=buffer_csv.getvalue().encode("utf-8-sig"),
+            file_name="prospection_imprimerie.csv",
+            mime="text/csv"
+        )
+
+        if marqueurs_carte:
+            st.subheader("🗺️ Localisation et noms des prospects trouvés")
+            
+            # Détection si l'utilisateur a cliqué sur une ligne du tableau pour centrer la carte
+            centre_lat = sum(m["lat"] for m in marqueurs_carte) / len(marqueurs_carte)
+            centre_lon = sum(m["lon"] for m in marqueurs_carte) / len(marqueurs_carte)
+            zoom_carte = 12
+
+            try:
+                lignes_selectionnees = evenement_selection.selection.rows
+                if lignes_selectionnees:
+                    idx_selectionne = lignes_selectionnees[0]
+                    nom_entreprise_selectionnee = tableau[idx_selectionne]["Entreprise"]
+                    # Trouver le prospect correspondant dans les marqueurs
+                    prospect_cible = next((m for m in marqueurs_carte if m["nom"] == nom_entreprise_selectionnee), None)
+                    if prospect_cible:
+                        centre_lat, centre_lon = prospect_cible["lat"], prospect_cible["lon"]
+                        zoom_carte = 16
+            except Exception:
+                pass
+
+            carte_resultats = folium.Map(location=[centre_lat, centre_lon], zoom_start=zoom_carte)
+
+            if st.session_state["mode_carte_zone"]:
+                folium.Circle(
+                    location=[float(st.session_state["reglages"]["zone_lat"]), float(st.session_state["reglages"]["zone_lon"])],
+                    radius=rayon_km * 1000,
+                    color="#1f77b4",
+                    weight=1,
+                    fill=True,
+                    fill_opacity=0.08
+                ).add_to(carte_resultats)
+
+            for m in marqueurs_carte:
+                fiche_html = (
+                    f"<b>{m['nom']}</b> (Note : {m['note']}/10)<br>"
+                    f"<i>{m['adresse']}</i><br><br>"
+                    f"<b>Idée :</b> {m['produit']}"
+                )
+                folium.Marker(
+                    location=[m["lat"], m["lon"]],
+                    popup=folium.Popup(fiche_html, max_width=280),
+                    # tooltip permanent=False pour n'afficher le nom qu'au survol de la souris
+                    tooltip=folium.Tooltip(f"<b>{m['nom']}</b>", permanent=False),
+                    icon=folium.Icon(color="green", icon="briefcase", prefix="fa")
+                ).add_to(carte_resultats)
+
+            st_folium(
+                carte_resultats,
+                height=460,
+                use_container_width=True,
+                returned_objects=[],
+                key="carte_resultats_prospects"
+            )

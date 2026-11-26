@@ -1,4 +1,3 @@
-import streamlit as st
 import os
 import json
 import math
@@ -747,7 +746,7 @@ with tab2:
             value=True
         )
     with col_opt3:
-        limite = st.slider("Nombre maximum de prospects à afficher :", 3, 12, 5)
+        limite = st.slider("Nombre maximum de prospects à afficher :", 1, 50, 10)
 
     with st.expander("⚙️ Paramètres du prompt de prospection"):
         st.caption("Variables automatiques disponibles dans tes consignes : `{lieu_cible}` (ville/zone choisie) et `{rayon_km}` (taille du cercle).")
@@ -803,11 +802,12 @@ with tab2:
 
             if tous_types:
                 regle_selection = f"""1. L'utilisateur a coché "TOUS TYPES D'ACTIVITÉS" : sélectionne jusqu'à {min(limite, len(vivier))} entreprises variées et pertinentes (commerces, artisans, sociétés locales) dans cette liste."""
-            else:
-                regle_selection = f"""1. RÈGLE STRICTE DE PERTINENCE : L'utilisateur recherche uniquement des entreprises ayant un rapport réel avec le mot-clé / thème : '{theme_recherche}'.
+              else:
+            regle_selection = f"""1. RÈGLE DE SÉLECTION DES PROSPECTS : L'objectif est d'atteindre {nb_prospects} prospects détaillés.
    - Inspecte attentivement le nom et le code NAF de chaque entreprise.
-   - Ne retiens QUE celles qui ont un minimum de rapport avec '{theme_recherche}' (jusqu'à {min(limite, len(vivier))} maximum).
-   - INTERDICTION ABSOLUE de compléter la liste avec des entreprises hors-sujet ou prises au hasard pour atteindre {limite} résultats : s'il n'y a que 1, 2 ou 3 entreprises pertinentes, ne renvoie QUE celles-là. S'il n'y en a aucune, renvoie une liste vide `[]`."""
+   - Priorise en premier les entreprises ayant un rapport réel avec le thème : '{theme_recherche}'.
+   - Si le vivier de prospects pertinents est épuisé avant d'arriver à {nb_prospects}, tu peux compléter la liste avec d'autres entreprises du vivier (même si elles ont moins de rapport avec le thème), mais tu dois le préciser clairement dans leur description.
+   - Prends tout ton temps pour structurer ta réponse, aucune précipitation n'est requise. Sois exhaustif."""
 
             consignes_interpretees = (
                 prosp_consignes

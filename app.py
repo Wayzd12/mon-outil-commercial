@@ -800,152 +800,152 @@ with tab2:
             st.success("✅ Tes réglages Prospection sont enregistrés !")
 
     if st.button("🔍 Rechercher, analyser et afficher sur la carte", type="primary"):
-    # --- GESTION DE LA MÉMOIRE DES RÉSULTATS DANS SESSION_STATE ---
-    if "tableau_prospects" not in st.session_state:
-        st.session_state["tableau_prospects"] = None
-    if "marqueurs_carte" not in st.session_state:
-        st.session_state["marqueurs_carte"] = []
-    if "lieu_dernier_resultat" not in st.session_state:
-        st.session_state["lieu_dernier_resultat"] = ""
-
-    # Bouton de recherche principale
-    if st.button("🔍 Rechercher, analyser et afficher sur la carte", type="primary"):
-        lat_actuelle = float(st.session_state["reglages"]["zone_lat"])
-        lon_actuelle = float(st.session_state["reglages"]["zone_lon"])
-
-        if st.session_state["mode_carte_zone"]:
-            nom_commune_actuelle, cps_actuels, _ = identifier_commune_gps(lat_actuelle, lon_actuelle)
-            if nom_commune_actuelle:
-                lieu_cible = f"un rayon de {rayon_km} km autour de {nom_commune_actuelle} ({', '.join(cps_actuels)})"
-            else:
-                lieu_cible = f"un rayon de {rayon_km} km autour du point GPS ({lat_actuelle}, {lon_actuelle})"
-        else:
-            villes_actuelles = identifier_communes_cp(codes_postaux)
-            if villes_actuelles:
-                lieu_cible = f"le secteur de {', '.join(villes_actuelles[:5])} (code postal : {codes_postaux})"
-            else:
-                lieu_cible = f"le code postal {codes_postaux}"
-
-        vivier = chercher_entreprises_pool(
-            mode_zone=st.session_state["mode_carte_zone"],
-            codes_postaux_str=codes_postaux,
-            zone_lat=lat_actuelle,
-            zone_lon=lon_actuelle,
-            rayon_km=rayon_km,
-            mot_cle=theme_recherche,
-            tous_types=tous_types,
-            renouveler=renouveler
-        )
-        st.info(f"📊 Nombre d'entreprises trouvées dans le vivier : {len(vivier)}")
-
-        if not vivier:
-            st.error(f"Aucune entreprise trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou de vérifier le code postal.")
-            st.session_state["tableau_prospects"] = None
-            st.session_state["marqueurs_carte"] = []
-        else:
-            nb_cibles = min(limite, len(vivier))
-            taille_lot = 10
-            tous_resultats_bruts = []
-            
-            progress_bar = st.progress(0, text="🚀 Lancement de l'analyse par lots...")
-
-            for i in range(0, nb_cibles, taille_lot):
-                lot_vivier = vivier[i:i + taille_lot]
-                lot_num_debut = i + 1
-                
-                lignes_vivier = []
-                for idx_relatif, ent in enumerate(lot_vivier, start=lot_num_debut):
-                    dist_txt = f" | Distance: {ent['distance_km']} km" if ent.get("distance_km") is not None else ""
-                    lignes_vivier.append(
-                        f"{idx_relatif}. Nom: {ent['nom']} | Code NAF: {ent['naf']} | Créée en: {ent['creation']} | Adresse locale: {ent['adresse']}{dist_txt}"
-                    )
-
-                if tous_types:
-                    regle_selection = f"""1. L'utilisateur a coché "TOUS TYPES D'ACTIVITÉS" : sélectionne toutes les entreprises valides de ce lot (jusqu'à {len(lot_vivier)}), de manière totalement diversifiée dans la liste fournie."""
+            # --- GESTION DE LA MÉMOIRE DES RÉSULTATS DANS SESSION_STATE ---
+            if "tableau_prospects" not in st.session_state:
+                st.session_state["tableau_prospects"] = None
+            if "marqueurs_carte" not in st.session_state:
+                st.session_state["marqueurs_carte"] = []
+            if "lieu_dernier_resultat" not in st.session_state:
+                st.session_state["lieu_dernier_resultat"] = ""
+        
+            # Bouton de recherche principale
+            if st.button("🔍 Rechercher, analyser et afficher sur la carte", type="primary"):
+                lat_actuelle = float(st.session_state["reglages"]["zone_lat"])
+                lon_actuelle = float(st.session_state["reglages"]["zone_lon"])
+        
+                if st.session_state["mode_carte_zone"]:
+                    nom_commune_actuelle, cps_actuels, _ = identifier_commune_gps(lat_actuelle, lon_actuelle)
+                    if nom_commune_actuelle:
+                        lieu_cible = f"un rayon de {rayon_km} km autour de {nom_commune_actuelle} ({', '.join(cps_actuels)})"
+                    else:
+                        lieu_cible = f"un rayon de {rayon_km} km autour du point GPS ({lat_actuelle}, {lon_actuelle})"
                 else:
-                    regle_selection = f"""1. RÈGLE DE SÉLECTION DES PROSPECTS : Analyse ce lot d'entreprises (numéros {lot_num_debut} à {lot_num_debut + len(lot_vivier) - 1}).
-- Inspecte attentivement le nom et le code NAF de chaque entreprise.
-- Sélectionne en priorité les entreprises ayant un rapport réel avec le thème : '{theme_recherche}'."""
-
-                consignes_interpretees = (
-                    prosp_consignes
-                    .replace("{lieu_cible}", lieu_cible)
-                    .replace("{rayon_km}", str(rayon_km))
+                    villes_actuelles = identifier_communes_cp(codes_postaux)
+                    if villes_actuelles:
+                        lieu_cible = f"le secteur de {', '.join(villes_actuelles[:5])} (code postal : {codes_postaux})"
+                    else:
+                        lieu_cible = f"le code postal {codes_postaux}"
+        
+                vivier = chercher_entreprises_pool(
+                    mode_zone=st.session_state["mode_carte_zone"],
+                    codes_postaux_str=codes_postaux,
+                    zone_lat=lat_actuelle,
+                    zone_lon=lon_actuelle,
+                    rayon_km=rayon_km,
+                    mot_cle=theme_recherche,
+                    tous_types=tous_types,
+                    renouveler=renouveler
                 )
-
-                prompt_prospection = f"""Tu es le directeur commercial d'une entreprise spécialisée dans : {prosp_offre}.
-
-CONTEXTE GÉOGRAPHIQUE DE LA RECHERCHE :
-L'utilisateur cible précisément : {lieu_cible}.
-Voici un sous-ensemble de {len(lot_vivier)} entreprises locales (Lot {(i // taille_lot) + 1}) :
-{chr(10).join(lignes_vivier)}
-
-MISSION :
-{regle_selection}
-2. Pour chaque entreprise retenue de ce lot, indique son numéro exact (`numero_entreprise` entre {lot_num_debut} et {lot_num_debut + len(lot_vivier) - 1}).
-3. Explique en 1 phrase simple ce que fait cette entreprise (`interpretation_activite`).
-4. Donne une note stricte sur 10 et applique ces consignes :
-{consignes_interpretees}"""
-
-                texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.75)
-
-                if texte_json:
-                    try:
-                        donnees_lot = ListeAnalyses.model_validate_json(texte_json)
-                        tous_resultats_bruts.extend(donnees_lot.resultats)
-                    except Exception as e:
-                        pass
-
-                progres = min(1.0, (i + taille_lot) / nb_cibles)
-                progress_bar.progress(progres, text=f"Analyse en cours... Lot {(i // taille_lot) + 1} traité.")
-
-            progress_bar.empty()
-
-            tableau = []
-            marqueurs_carte = []
-
-            for item in tous_resultats_bruts:
-                index_reel = item.numero_entreprise - 1
-                if 0 <= index_reel < len(vivier):
-                    note_propre = round(item.note_pertinence / 10) if item.note_pertinence > 10 else item.note_pertinence
-                    note_propre = max(1, min(10, note_propre))
-
-                    if (not tous_types) and note_propre < 5:
-                        continue
-
-                    ent = vivier[index_reel]
-                    ligne_tab = {
-                        "Entreprise": ent["nom"],
-                        "Activité détectée": item.interpretation_activite,
-                        "Créée en": ent["creation"],
-                        "Adresse locale": ent["adresse"],
-                        "Note /10": note_propre,
-                        "Produit à proposer": item.produit_imprimerie,
-                        "Message LinkedIn": item.message_linkedin,
-                        "Objet Email": item.objet_email
-                    }
-                    if ent.get("distance_km") is not None:
-                        ligne_tab["Distance"] = f"{ent['distance_km']} km"
-                    tableau.append(ligne_tab)
-
-                    if ent.get("lat") and ent.get("lon"):
-                        marqueurs_carte.append({
-                            "lat": ent["lat"],
-                            "lon": ent["lon"],
-                            "nom": ent["nom"],
-                            "adresse": ent["adresse"],
-                            "produit": item.produit_imprimerie,
-                            "note": note_propre
-                        })
-
-            if tableau:
-                tableau.sort(key=lambda x: x["Note /10"], reverse=True)
-                st.session_state["tableau_prospects"] = tableau
-                st.session_state["marqueurs_carte"] = marqueurs_carte
-                st.session_state["lieu_dernier_resultat"] = lieu_cible
-                st.rerun()
-            else:
-                st.warning("Aucune entreprise pertinente retenue sur cette tentative.")
+                st.info(f"📊 Nombre d'entreprises trouvées dans le vivier : {len(vivier)}")
+        
+                if not vivier:
+                    st.error(f"Aucune entreprise trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou de vérifier le code postal.")
+                    st.session_state["tableau_prospects"] = None
+                    st.session_state["marqueurs_carte"] = []
+                else:
+                    nb_cibles = min(limite, len(vivier))
+                    taille_lot = 10
+                    tous_resultats_bruts = []
+                    
+                    progress_bar = st.progress(0, text="🚀 Lancement de l'analyse par lots...")
+        
+                    for i in range(0, nb_cibles, taille_lot):
+                        lot_vivier = vivier[i:i + taille_lot]
+                        lot_num_debut = i + 1
+                        
+                        lignes_vivier = []
+                        for idx_relatif, ent in enumerate(lot_vivier, start=lot_num_debut):
+                            dist_txt = f" | Distance: {ent['distance_km']} km" if ent.get("distance_km") is not None else ""
+                            lignes_vivier.append(
+                                f"{idx_relatif}. Nom: {ent['nom']} | Code NAF: {ent['naf']} | Créée en: {ent['creation']} | Adresse locale: {ent['adresse']}{dist_txt}"
+                            )
+        
+                        if tous_types:
+                            regle_selection = f"""1. L'utilisateur a coché "TOUS TYPES D'ACTIVITÉS" : sélectionne toutes les entreprises valides de ce lot (jusqu'à {len(lot_vivier)}), de manière totalement diversifiée dans la liste fournie."""
+                        else:
+                            regle_selection = f"""1. RÈGLE DE SÉLECTION DES PROSPECTS : Analyse ce lot d'entreprises (numéros {lot_num_debut} à {lot_num_debut + len(lot_vivier) - 1}).
+        - Inspecte attentivement le nom et le code NAF de chaque entreprise.
+        - Sélectionne en priorité les entreprises ayant un rapport réel avec le thème : '{theme_recherche}'."""
+        
+                        consignes_interpretees = (
+                            prosp_consignes
+                            .replace("{lieu_cible}", lieu_cible)
+                            .replace("{rayon_km}", str(rayon_km))
+                        )
+        
+                        prompt_prospection = f"""Tu es le directeur commercial d'une entreprise spécialisée dans : {prosp_offre}.
+        
+        CONTEXTE GÉOGRAPHIQUE DE LA RECHERCHE :
+        L'utilisateur cible précisément : {lieu_cible}.
+        Voici un sous-ensemble de {len(lot_vivier)} entreprises locales (Lot {(i // taille_lot) + 1}) :
+        {chr(10).join(lignes_vivier)}
+        
+        MISSION :
+        {regle_selection}
+        2. Pour chaque entreprise retenue de ce lot, indique son numéro exact (`numero_entreprise` entre {lot_num_debut} et {lot_num_debut + len(lot_vivier) - 1}).
+        3. Explique en 1 phrase simple ce que fait cette entreprise (`interpretation_activite`).
+        4. Donne une note stricte sur 10 et applique ces consignes :
+        {consignes_interpretees}"""
+        
+                        texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.75)
+        
+                        if texte_json:
+                            try:
+                                donnees_lot = ListeAnalyses.model_validate_json(texte_json)
+                                tous_resultats_bruts.extend(donnees_lot.resultats)
+                            except Exception as e:
+                                pass
+        
+                        progres = min(1.0, (i + taille_lot) / nb_cibles)
+                        progress_bar.progress(progres, text=f"Analyse en cours... Lot {(i // taille_lot) + 1} traité.")
+        
+                    progress_bar.empty()
+        
+                    tableau = []
+                    marqueurs_carte = []
+        
+                    for item in tous_resultats_bruts:
+                        index_reel = item.numero_entreprise - 1
+                        if 0 <= index_reel < len(vivier):
+                            note_propre = round(item.note_pertinence / 10) if item.note_pertinence > 10 else item.note_pertinence
+                            note_propre = max(1, min(10, note_propre))
+        
+                            if (not tous_types) and note_propre < 5:
+                                continue
+        
+                            ent = vivier[index_reel]
+                            ligne_tab = {
+                                "Entreprise": ent["nom"],
+                                "Activité détectée": item.interpretation_activite,
+                                "Créée en": ent["creation"],
+                                "Adresse locale": ent["adresse"],
+                                "Note /10": note_propre,
+                                "Produit à proposer": item.produit_imprimerie,
+                                "Message LinkedIn": item.message_linkedin,
+                                "Objet Email": item.objet_email
+                            }
+                            if ent.get("distance_km") is not None:
+                                ligne_tab["Distance"] = f"{ent['distance_km']} km"
+                            tableau.append(ligne_tab)
+        
+                            if ent.get("lat") and ent.get("lon"):
+                                marqueurs_carte.append({
+                                    "lat": ent["lat"],
+                                    "lon": ent["lon"],
+                                    "nom": ent["nom"],
+                                    "adresse": ent["adresse"],
+                                    "produit": item.produit_imprimerie,
+                                    "note": note_propre
+                                })
+        
+                    if tableau:
+                        tableau.sort(key=lambda x: x["Note /10"], reverse=True)
+                        st.session_state["tableau_prospects"] = tableau
+                        st.session_state["marqueurs_carte"] = marqueurs_carte
+                        st.session_state["lieu_dernier_resultat"] = lieu_cible
+                        st.rerun()
+                    else:
+                        st.warning("Aucune entreprise pertinente retenue sur cette tentative.")
 
     # --- AFFICHAGE PERSISTANT DES RÉSULTATS (MÊME APRÈS UN CLIC) ---
     if st.session_state["tableau_prospects"] is not None:

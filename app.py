@@ -134,13 +134,22 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-def _appel_unique_ia(modele: str, prompt: str, config_args: dict) -> str:
+def _appel_unique_ia(modele: str, prompt: str, config_args: dict, theme_recherche: str = "", prosp_offre: str = "") -> str:
+    # On enrichit le prompt pour que l'IA sache exactement quel visuel générer
+    prompt_complet = f"""
+    {prompt}
+    
+    INSTRUCTION SPÉCIALE POUR LE VISUEL (champ 'prompt_image_humour') : 
+    Rédige un prompt en anglais très détaillé, propre et professionnel pour Pollinations.ai, représentant une illustration ou une scène en lien direct avec le thème : '{theme_recherche}' et l'offre commerciale : '{prosp_offre}'. Pas de texte parasite sur l'image.
+    """
+    
     response = client.models.generate_content(
         model=modele,
-        contents=prompt,
+        contents=prompt_complet,
         config=types.GenerateContentConfig(**config_args)
     )
     return response.text
+
 
 def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.85):
     """Appelle toujours la vraie IA Google avec chronomètre de 20s max par essai."""
@@ -228,17 +237,8 @@ class ListeAnalyses(BaseModel):
     resultats: list[ProspectSelectionne]
 
 class NewsletterReponse(BaseModel):
-    texte_newsletter: str = Field(description="Le texte complet et prêt à publier de la newsletter")
-   
-    # Construction d'un prompt beaucoup plus précis et contextuel pour l'IA
-    prompt_image_sur_mesure = f"""
-    Professional commercial illustration, high quality, vibrant colors. 
-    The subject is related to: {theme_recherche}. 
-    Context of the business offering: {prosp_offre}.
-    Visual details: A clean, modern, professional workplace or business scene illustrating {theme_recherche} in a local market, 
-    no weird text, highly detailed, photorealistic corporate style.
-    """
-
+    texte_newsletter: str = Field(description="Le texte complet et professionnel de la publication.")
+    prompt_image_humour: str = Field(description="A detailed English visual prompt for Pollinations.ai describing a clean, modern, professional corporate illustration related to the topic.")
     categorie_produit: str = Field(description="Un seul mot-clé en anglais parmi cette liste pour la vraie photo pro : 'businesscard', 'storefront', 'signage', 'restaurant', 'printing'")
 
 def calculer_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

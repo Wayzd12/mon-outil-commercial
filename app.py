@@ -809,8 +809,6 @@ with tab2:
 - Si le vivier de prospects pertinents est épuisé avant d'arriver à {nb_prospects}, tu peux compléter la liste avec d'autres entreprises du vivier (même si elles ont moins de rapport avec le thème), mais tu dois le préciser clairement dans leur description.
 - Prends tout ton temps pour structurer ta réponse, aucune précipitation n'est requise. Sois exhaustif."""
 
-
-
             consignes_interpretees = (
                 prosp_consignes
                 .replace("{lieu_cible}", lieu_cible)

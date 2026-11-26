@@ -40,11 +40,20 @@ if not st.session_state["connecte"]:
 FICHIER_REGLAGES = "mes_reglages_imprimerie.json"
 
 REGLAGES_PAR_DEFAUT = {
+    
     "p_identite": "Imprimerie moderne basée au Centre DIGITALIS Agglomération (ZAE du Bosc – 8 Rue des Vergers, 34130 Mudaison) (cartes de visite, flyers, brochures, menus, affiches, enseignes de façade, vitrophanie, panneaux de chantier)",
     "p_style": "Chaleureux, concret, direct, comme un artisan-conseil local qui parle simplement sans jargon",
-    "p_intro": "Commence par un titre accrocheur (moins de 65 caractères), puis une introduction de 3 lignes maximum qui part d'une situation vécue par les commerçants ou artisans locaux.",
-    "p_corps": "Donne 3 conseils pratiques et actionnables liés à l'impression ou la signalétique. Pour chaque conseil, ajoute une ligne en gras '**Ce que ça change pour vous :**'.",
-    "p_conclusion": "Termine par 2 lignes de conclusion positives et une question ouverte simple pour inciter les lecteurs à commenter.",
+    
+    # Consigne d'intro avec exigence de structure
+    "p_intro": "Commence par un titre accrocheur (<65 car.), puis une ligne de séparation '---'. Rédige ensuite une introduction de 3 lignes max incarnant ton ancrage local à Mudaison, suivie d'un autre séparateur '---'.",
+    
+    # Consigne de corps avec blocs et émojis obligatoires
+    "p_corps": "Propose 3 conseils pratiques. Chaque conseil DOIT commencer par un émoji pertinent (ex: 💡, 📐, 🖨️), être séparé par une ligne '---', et contenir une ligne en gras : '**Ce que ça change pour vous :**'.",
+    
+    # Consigne de conclusion claire
+    "p_conclusion": "Termine par une ligne '---', puis 2 lignes de conclusion positives suivies d'une question ouverte simple pour inciter à réagir."
+}
+
     "prosp_offre": "Impression petit et grand format depuis notre atelier du Centre DIGITALIS Agglomération à Mudaison : cartes de visite, flyers, brochures, menus, enseignes, vitrophanie, panneaux de chantier",
     "prosp_consignes": "1. Tiens compte de la localisation précise ({lieu_cible}) et de l'adresse exacte de chaque entreprise.\n2. Sélectionne uniquement les entreprises en rapport avec le thème demandé.\n3. Dans le message LinkedIn (max 230 caractères), positionne-toi clairement comme un **voisin immédiat basé à Mudaison (ZAE du Bosc)** pour créer un ancrage local fort.\n4. Adapte le produit recommandé à l'emplacement et à l'année de création.\n5. Ne sélectionne que des entreprises ouvertes.",
     "codes_postaux": "34130",

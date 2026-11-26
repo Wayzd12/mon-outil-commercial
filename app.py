@@ -831,6 +831,7 @@ with tab2:
             tous_types=tous_types,
             renouveler=renouveler
         )
+        st.info(f"📊 Nombre d'entreprises trouvées dans le vivier : {len(vivier)}")
 
         if not vivier:
             st.error(f"Aucune entreprise trouvée sur {lieu_cible}. Essaie d'agrandir le rayon ou de vérifier le code postal.")

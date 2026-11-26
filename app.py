@@ -152,7 +152,7 @@ def _appel_unique_ia(modele: str, prompt: str, config_args: dict, theme_recherch
 
 
 def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.85):
-    """Appelle toujours la vraie IA Google avec chronomètre de 20s max par essai."""
+    """Appelle toujours la vraie IA Google avec chronomètre de 90s max par essai."""
     modeles_actifs = ["gemini-3.5-flash-lite", "gemini-3.5-flash"]
     zone_statut = st.empty()
     derniere_erreur = ""
@@ -164,7 +164,7 @@ def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.85):
 
     for cycle in range(1, 4):
         for modele in list(modeles_actifs):
-            zone_statut.info(f"⏳ L'IA analyse et rédige sur mesure (essai {cycle}/3 — {modele})... 20 sec max.")
+            zone_statut.info(f"⏳ L'IA analyse et rédige sur mesure (essai {cycle}/3 — {modele})... 90 sec max selon le nombre de prospects.")
             executor = ThreadPoolExecutor(max_workers=1)
             futur = executor.submit(_appel_unique_ia, modele, prompt, config_args)
             try:

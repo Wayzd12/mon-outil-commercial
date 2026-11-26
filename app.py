@@ -775,6 +775,7 @@ with tab2:
             st.caption(f"📍 **Variable de lieu détectée pour l'IA :** {', '.join(villes_cp[:6])} ({codes_postaux})")
 
 
+    col_opt2, col_opt3 = st.columns([1.5, 2])
     with col_opt2:
         renouveler = st.checkbox(
             "🎲 Varier les entreprises à chaque recherche",
@@ -782,6 +783,7 @@ with tab2:
         )
     with col_opt3:
         limite = st.slider("Nombre maximum de prospects à afficher :", 1, 50, 10)
+
 
     with st.expander("⚙️ Paramètres du prompt de prospection"):
         st.caption("Variables automatiques disponibles dans tes consignes : `{lieu_cible}` (ville/zone choisie) et `{rayon_km}` (taille du cercle).")

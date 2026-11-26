@@ -792,7 +792,7 @@ with tab2:
 
     with st.expander("⚙️ Paramètres du prompt de prospection"):
         st.caption("Variables automatiques disponibles dans tes consignes : `{lieu_cible}` (ville/zone choisie) et `{rayon_km}` (taille du cercle).")
-        prosp_offre = st.text_input("Tes services d'imprimerie à mettre en avant :", value=reg["prosp_offre"], key="input_prosp_offre_v2")
+        prosp_offre = st.text_input("Tes services d'imprimerie à mettre en avant :", value=REGLAGES_PAR_DEFAUT["prosp_offre"], key="input_prosp_offre_v2")
         prosp_consignes = st.text_area("Consignes d'interprétation pour l'IA :", value=reg["prosp_consignes"], height=130, key="area_prosp_consignes_v2")
 
         if st.button("💾 Enregistrer ces réglages Prospection", key="btn_save_prosp_settings_v2"):

@@ -809,7 +809,7 @@ with tab2:
                 st.session_state["lieu_dernier_resultat"] = ""
         
             # Bouton de recherche principale
-            if st.button("🔍 Rechercher, analyser et afficher sur la carte", type="primary"):
+            if st.button("🔍 Rechercher, analyser et afficher sur la carte", type="primary", key="btn_rechercher_prospects"):
                 lat_actuelle = float(st.session_state["reglages"]["zone_lat"])
                 lon_actuelle = float(st.session_state["reglages"]["zone_lon"])
         

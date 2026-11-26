@@ -72,30 +72,30 @@ def recuperer_image_ia_securisee(prompt_image, max_tentatives=3):
     encoded_prompt = urllib.parse.quote(prompt_image)
     url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&nologo=true"
     
-    # Conteneur visuel pour suivre l'état de l'image en direct
     status_box = st.empty()
     
     for tentative in range(1, max_tentatives + 1):
-        status_box.info(f"🎨 Génération de l'image IA en cours (Tentative {tentative}/{max_tentatives})... Patience, Pollinations chauffe les pinceaux 🖌️")
+        status_box.info(f"🎨 Génération de l'image IA en cours (Tentative {tentative}/{max_tentatives})... Patience, l'IA travaille 🖌️")
         
         try:
-            # On laisse un délai progressif ou fixe entre les essais
-            time.sleep(2)
-            response = requests.get(url, timeout=30)
+            # On donne un peu plus de temps de timeout (40s)
+            response = requests.get(url, timeout=40)
             
-            # On vérifie que la réponse est un succès et que le contenu pèse assez lourd pour être une vraie image
             if response.status_code == 200 and len(response.content) > 5000:
                 status_box.success("✅ Image IA générée avec succès !")
                 time.sleep(1)
-                status_box.empty() # On efface le message de statut propre
-                return url
+                status_box.empty()
+                return response.content
         except Exception as e:
             pass
         
-        status_box.warning(f"⚠️ Tentative {tentative} un peu lente... Nouvelle tentative dans 3 secondes...")
-        time.sleep(3)
+        # Si ce n'est pas la dernière tentative, on applique le délai progressif (3s, 6s, 9s...)
+        if tentative < max_tentatives:
+            delai = tentative * 3  # Tentative 1 -> 3s | Tentative 2 -> 6s | Tentative 3 -> 9s
+            status_box.warning(f"⚠️ Tentative {tentative} un peu lente. Prochain essai dans {delai} secondes...")
+            time.sleep(delai)
         
-    status_box.error("❌ L'image IA n'a pas pu être récupérée (serveur Pollinations saturé).")
+    status_box.error("❌ L'image IA n'a pas pu être récupérée après 3 essais.")
     time.sleep(2)
     status_box.empty()
     return None

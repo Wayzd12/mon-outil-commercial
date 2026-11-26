@@ -592,6 +592,11 @@ STRUCTURE OBLIGATOIRE À SUIVRE :
 - Développement : {p_corps}
 - Conclusion : {p_conclusion}
 
+RÈGLES VISUELLES STRICTES DE MISE EN PAGE :
+- Aère le texte au maximum avec des paragraphes très courts (3 lignes max).
+- Utilise un émoji pertinent en début de chaque bloc ou conseil (ex: 💡, 📐, 🖨️, 📍).
+- Sépare CHAQUE grande partie (titre, introduction, chaque conseil, conclusion) par une ligne contenant uniquement : ---
+
 Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'introduction avant le titre."""
 
         texte_json, erreur = appeler_gemini_patient(prompt_complet, schema=NewsletterReponse, temperature=0.95)

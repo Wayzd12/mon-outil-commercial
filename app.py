@@ -835,14 +835,16 @@ with tab2:
                 )
 
             if tous_types:
-                regle_selection = f"""1. L'utilisateur a coché "TOUS TYPES D'ACTIVITÉS" : sélectionne jusqu'à {min(limite, len(vivier))} entreprises variées et pertinentes (commerces, artisans, sociétés locales) dans cette liste."""
+                regle_selection = f"""1. L'utilisateur a coché "TOUS TYPES D'ACTIVITÉS" : sélectionne jusqu'à {min(limite, len(vivier))} entreprises de TOUT TYPE d'activité (sans aucune restriction sectorielle), de manière totalement diversifiée dans la liste fournie."""
             else:
                 regle_selection = f"""1. RÈGLE DE SÉLECTION DES PROSPECTS : L'objectif est d'atteindre {nb_prospects} prospects détaillés.
 - Inspecte attentivement le nom et le code NAF de chaque entreprise.
 - Priorise en premier les entreprises ayant un rapport réel avec le thème : '{theme_recherche}'.
 - Si le vivier de prospects pertinents est épuisé avant d'arriver à {nb_prospects}, tu peux compléter la liste avec d'autres entreprises du vivier (même si elles ont moins de rapport avec le thème), mais tu dois le préciser clairement dans leur description.
 - Prends tout ton temps pour structurer ta réponse, aucune précipitation n'est requise. Sois exhaustif."""
-
+                regle_selection += """
+- Prends tout ton temps pour structurer ta réponse, aucune précipitation n'est requise. Sois exhaustif et rigoureux dans l'analyse."""
+            
             consignes_interpretees = (
                 prosp_consignes
                 .replace("{lieu_cible}", lieu_cible)
@@ -863,7 +865,7 @@ MISSION :
 4. Donne une note stricte sur 10 (entre 1 et 10, jamais sur 100 — mets moins de 5 si le rapport avec '{theme_recherche}' est trop faible) et applique ces consignes :
 {consignes_interpretees}"""
 
-            texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.7)
+            texte_json, erreur_ia = appeler_gemini_patient(prompt_prospection, schema=ListeAnalyses, temperature=0.75)
 
             if not texte_json:
                 st.error(f"❌ L'IA n'a pas pu analyser les prospects. Détail : {erreur_ia}")

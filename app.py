@@ -60,7 +60,41 @@ REGLAGES_PAR_DEFAUT = {
     "zone_lon": 4.0440,   # Longitude centrée sur Mudaison
     "rayon_km": 10
 }
+CATALOGUE_ALEATOIRE = {
+    "chantier": [
+        "https://images.unsplash.com/photo-1541888946425-d0fbb18f154d?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1200&q=80"
+    ],
+    "commerce": [
+        "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1555529771-835f59fc5efe?auto=format&fit=crop&w=1200&q=80"
+    ],
+    "imprimerie": [
+        "https://images.unsplash.com/photo-1562564055-71e051d33c19?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=1200&q=80"
+    ],
+    "signaletique": [
+        "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80"
+    ],
+    "defaut": [
+        "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80"
+    ]
+}
 
+def obtenir_image_aleatoire(sujet):
+    sujet_lower = sujet.lower()
+    categorie = "defaut"
+    if any(m in sujet_lower for m in ["chantier", "travaux", "bâtiment"]):
+        categorie = "chantier"
+    elif any(m in sujet_lower for m in ["commerce", "boutique", "magasin", "vitrine"]):
+        categorie = "commerce"
+    elif any(m in sujet_lower for m in ["impression", "flyer", "affiche", "carte"]):
+        categorie = "imprimerie"
+    elif any(m in sujet_lower for m in ["enseigne", "panneau", "signalétique"]):
+        categorie = "signaletique"
+    return random.choice(CATALOGUE_ALEATOIRE[categorie])
 def charger_reglages():
     donnees = REGLAGES_PAR_DEFAUT.copy()
     if os.path.exists(FICHIER_REGLAGES):
@@ -71,42 +105,6 @@ def charger_reglages():
         except Exception:
             pass
     return donnees
-
-def recuperer_image_ia_securisee(prompt_image, max_tentatives=3):
-    import urllib.parse
-    import requests
-    import time
-    
-    encoded_prompt = urllib.parse.quote(prompt_image)
-    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&nologo=true"
-    
-    status_box = st.empty()
-    
-    for tentative in range(1, max_tentatives + 1):
-        status_box.info(f"🎨 Génération de l'image IA en cours (Tentative {tentative}/{max_tentatives})... Patience, l'IA travaille 🖌️")
-        
-        try:
-            # On donne un peu plus de temps de timeout (40s)
-            response = requests.get(url, timeout=40)
-            
-            if response.status_code == 200 and len(response.content) > 5000:
-                status_box.success("✅ Image IA générée avec succès !")
-                time.sleep(1)
-                status_box.empty()
-                return response.content
-        except Exception as e:
-            pass
-        
-        # Si ce n'est pas la dernière tentative, on applique le délai progressif (3s, 6s, 9s...)
-        if tentative < max_tentatives:
-            delai = tentative * 3  # Tentative 1 -> 3s | Tentative 2 -> 6s | Tentative 3 -> 9s
-            status_box.warning(f"⚠️ Tentative {tentative} un peu lente. Prochain essai dans {delai} secondes...")
-            time.sleep(delai)
-        
-    status_box.error("❌ L'image IA n'a pas pu être récupérée après 3 essais.")
-    time.sleep(2)
-    status_box.empty()
-    return None
 
 def sauvegarder_reglages_sur_disque(nouveaux_reglages: dict):
     st.session_state["reglages"].update(nouveaux_reglages)
@@ -529,57 +527,78 @@ with st.expander("💾 Sauvegarder ou restaurer mes réglages préférés"):
 tab1, tab2 = st.tabs(["📝 Ma Newsletter LinkedIn", "🎯 Prospection & Carte Locale"])
 
 # ==============================================================================
-# ONGLET 1 : NEWSLETTER PERSONNALISABLE
+# ONGLET 1 : GÉNÉRATEUR DE NEWSLETTER & VISUELS PROFESSIONNELS
 # ==============================================================================
 with tab1:
-    st.header("Générer une newsletter 100 % rédigée par l'IA")
+    st.header("📰 Générateur de Newsletter LinkedIn & Illustration")
+    
+    # 1. Saisie des informations de la newsletter
+    sujet_final = st.text_input(
+        "Sujet principal de la newsletter :", 
+        value="Conseils pour dynamiser la vitrine et l'enseigne de votre commerce local",
+        key="input_sujet_newsletter"
+    )
+    
+    actu_du_jour = st.text_input(
+        "Inspiration du moment / Actualité (optionnel) :", 
+        value="", 
+        placeholder="Ex: Arrivée du printemps, fêtes de fin d'année, chantier en cours...",
+        key="input_actu_newsletter"
+    )
 
-    col_th1, col_th2 = st.columns(2)
-    with col_th1:
-        choix_theme = st.selectbox(
-            "1. Choisis un thème de base :",
-            ["🎲 Sujet surprise (aléatoire parmi les thèmes)"] + THEMES_IMPRIMERIE
+    with st.expander("⚙️ Paramètres du style et de la structure de la newsletter"):
+        p_identite = st.text_input("Identité de l'expéditeur :", value=reg["p_identite"], key="nl_p_identite")
+        p_style = st.text_input("Style d'écriture :", value=reg["p_style"], key="nl_p_style")
+        p_intro = st.text_area("Consigne Introduction :", value=reg["p_intro"], key="nl_p_intro")
+        p_corps = st.text_area("Consigne Développement (3 conseils) :", value=reg["p_corps"], key="nl_p_corps")
+        p_conclusion = st.text_area("Consigne Conclusion :", value=reg["p_conclusion"], key="nl_p_conclusion")
+
+    st.markdown("---")
+    
+    # 2. Sélection de l'image (Automatique, Mot-clé ou Import PC)
+    st.subheader("🖼️ Choix de l'illustration")
+    mode_image = st.radio(
+        "Comment souhaitez-vous choisir l'image ?",
+        [
+            "🤖 Automatique & Aléatoire (selon le sujet)", 
+            "🔍 Rechercher par mot-clé dans le catalogue", 
+            "💻 Importer une photo depuis mon ordinateur"
+        ],
+        key="radio_mode_selection_image"
+    )
+
+    image_selectionnee = None
+
+    if mode_image == "🤖 Automatique & Aléatoire (selon le sujet)":
+        image_selectionnee = obtenir_image_aleatoire(sujet_final)
+        st.image(image_selectionnee, caption="Illustration sélectionnée automatiquement et aléatoirement", use_container_width=True)
+
+    elif mode_image == "🔍 Rechercher par mot-clé dans le catalogue":
+        mot_cle_perso = st.text_input(
+            "Entrez un mot-clé (chantier, commerce, imprimerie, bureau, signaletique...)", 
+            value="imprimerie", 
+            key="input_mot_cle_perso"
         )
-    with col_th2:
-        mots_cles_perso = st.text_input(
-            "2. Ajoute ou modifie tes mots-clés / sujet précis (facultatif) :",
-            placeholder="Ex: cartes de visite dorées, panneaux de chantier maçon, vitrine Noël..."
+        image_selectionnee = obtenir_image_aleatoire(mot_cle_perso)
+        st.image(image_selectionnee, caption=f"Résultat dans le catalogue pour : '{mot_cle_perso}'", use_container_width=True)
+
+    elif mode_image == "💻 Importer une photo depuis mon ordinateur":
+        fichier_upload = st.file_uploader(
+            "Téléchargez votre propre image (JPG, PNG)", 
+            type=["jpg", "jpeg", "png"], 
+            key="uploader_image_locale_nl"
         )
-
-    reg = st.session_state["reglages"]
-
-    with st.expander("⚙️ Paramètres du prompt (Introduction, Style, Corps, Conclusion)"):
-        st.caption("Modifie ces réglages puis clique sur 'Enregistrer mes réglages' pour les garder :")
-
-        p_identite = st.text_input("Ton entreprise & tes produits :", value=reg["p_identite"])
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            p_style = st.text_input("Style et ton d'écriture :", value=reg["p_style"])
-            p_intro = st.text_area("Consigne pour l'Introduction :", value=reg["p_intro"], height=100)
-        with col_p2:
-            p_corps = st.text_area("Consigne pour le Corps (les conseils) :", value=reg["p_corps"], height=100)
-            p_conclusion = st.text_area("Consigne pour la Conclusion :", value=reg["p_conclusion"], height=100)
-
-        if st.button("💾 Enregistrer ces réglages Newsletter"):
-            sauvegarder_reglages_sur_disque({
-                "p_identite": p_identite,
-                "p_style": p_style,
-                "p_intro": p_intro,
-                "p_corps": p_corps,
-                "p_conclusion": p_conclusion
-            })
-            st.success("✅ Tes réglages Newsletter sont enregistrés !")
-
-    if st.button("✨ Générer ma newsletter sur mesure", type="primary"):
-        actus = collecter_actualites(["https://www.bpifrance.fr/rss.xml"])
-        actu_du_jour = random.choice(actus) if actus else "Les entreprises locales cherchent à attirer des clients."
-
-        base_sujet = random.choice(THEMES_IMPRIMERIE) if choix_theme.startswith("🎲") else choix_theme
-        if mots_cles_perso.strip():
-            sujet_final = f"{base_sujet} — Focus spécifique demandé : {mots_cles_perso.strip()}"
+        if fichier_upload is not None:
+            image_selectionnee = fichier_upload
+            st.image(fichier_upload, caption="Votre photo personnelle importée", use_container_width=True)
         else:
-            sujet_final = base_sujet
+            st.info("Veuillez glisser-déposer ou sélectionner une image depuis votre PC.")
 
+    st.markdown("---")
+
+    # 3. Bouton de génération de la newsletter par Gemini
+    if st.button("✨ Rédiger la Newsletter", type="primary", key="btn_generer_newsletter_pro"):
+        
         prompt_complet = f"""Tu es le dirigeant de : {p_identite}.
 Rédige une édition INÉDITE et ORIGINALE de newsletter LinkedIn destinée aux dirigeants, commerçants et artisans locaux.
 
@@ -599,67 +618,38 @@ RÈGLES VISUELLES STRICTES DE MISE EN PAGE :
 
 Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'introduction avant le titre."""
 
-        texte_json, erreur = appeler_gemini_patient(prompt_complet, schema=NewsletterReponse, temperature=0.95)
+        with st.spinner("✍️ Rédaction de la newsletter par l'IA..."):
+            texte_newsletter_genere, erreur_ia = appeler_gemini_patient(prompt_complet, temperature=0.7)
 
-        if texte_json:
-            try:
-                donnees_nl = NewsletterReponse.model_validate_json(texte_json)
-                st.success("✅ Newsletter rédigée par l'IA !")
-                
-                # --- DIVISION DE LA PAGE EN 2 COLONNES ---
-                col_texte, col_images = st.columns([1.5, 1])
-                
-                with col_texte:
-                    st.subheader("Texte de la newsletter")
-                    # Restauration propre des retours à la ligne
-                    texte_propre = donnees_nl.texte_newsletter.replace("\\n", "\n")
-                    st.text_area("Copie-colle ce texte sur LinkedIn :", value=texte_propre, height=485, label_visibility="collapsed")
-                
-                with col_images:
-                    st.subheader("Visuels")
-                    
-                    with st.spinner("Génération des visuels en cours..."):
-                        img_bytes = recuperer_image_ia_securisee(donnees_nl.prompt_image_humour)
-                    
-                    cat = donnees_nl.categorie_produit.lower()
-                    if "card" in cat:
-                        unsplash_id = "1633533824538-2321522f77dd"
-                    elif "store" in cat or "sign" in cat:
-                        unsplash_id = "1513519245088-0e12902e5a38"
-                    elif "restaurant" in cat:
-                        unsplash_id = "1517248135467-4c7edcad34c4"
-                    else:
-                        unsplash_id = "1562564055-71e051d33c19"
-                    url_img_pro = f"https://images.unsplash.com/photo-{unsplash_id}?w=600&h=600&fit=crop"
-                    
-                    src_ia = ""
-                    if img_bytes:
-                        import base64
-                        encoded_img = base64.b64encode(img_bytes).decode('utf-8')
-                        src_ia = f"data:image/jpeg;base64,{encoded_img}"
-                        
-                    if src_ia:
-                        html_images = f"""
-                        <div style="display: flex; gap: 10px; height: 485px; align-items: stretch; margin-top: 8px;">
-                            <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="Visuel IA">
-                                <img src="{src_ia}" style="width: 100%; height: 100%; object-fit: cover;">
-                            </div>
-                            <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="Visuel Professionnel">
-                                <img src="{url_img_pro}" style="width: 100%; height: 100%; object-fit: cover;">
-                            </div>
-                        </div>
-                        """
-                        st.markdown(html_images, unsafe_allow_html=True)
-                    else:
-                        st.warning("⏳ Image en cours de chargement...")
-                        st.image(url_img_pro, use_container_width=True, height=485)
+        if erreur_ia:
+            st.error(f"Erreur lors de la génération : {erreur_ia}")
+        elif texte_newsletter_genere:
+            st.success("✅ Newsletter générée avec succès !")
+            
+            # Stockage en session pour persistance
+            st.session_state["derniere_newsletter"] = texte_newsletter_genere
+            st.session_state["derniere_image_nl"] = image_selectionnee
 
-                
-            except Exception as e:
-                st.error(f"Erreur de lecture de la réponse IA : {e}")
-        else:
-            st.error(f"❌ L'IA n'a pas pu répondre. Détail : {erreur}")
-
+    # 4. Affichage persistant du résultat si présent en mémoire
+    if "derniere_newsletter" in st.session_state and st.session_state["derniere_newsletter"]:
+        st.subheader("📋 Résultat prêt à être publié")
+        
+        # Affichage de l'image retenue
+        if "derniere_image_nl" in st.session_state and st.session_state["derniere_image_nl"]:
+            st.image(st.session_state["derniere_image_nl"], caption="Visuel associé à la publication", use_container_width=True)
+            
+        # Affichage du texte dans un conteneur aéré avec bordure
+        with st.container(border=True):
+            st.markdown(st.session_state["derniere_newsletter"])
+            
+        # Bouton de copie / téléchargement rapide
+        st.download_button(
+            label="📥 Télécharger le texte de la newsletter (.txt)",
+            data=st.session_state["derniere_newsletter"].encode("utf-8"),
+            file_name="newsletter_imprimerie.txt",
+            mime="text/plain",
+            key="btn_download_txt_nl"
+        )
 
 # ==============================================================================
 # ONGLET 2 : PROSPECTION INTELLIGENTE & CARTE INTERACTIVE

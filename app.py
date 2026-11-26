@@ -229,7 +229,15 @@ class ListeAnalyses(BaseModel):
 
 class NewsletterReponse(BaseModel):
     texte_newsletter: str = Field(description="Le texte complet et prêt à publier de la newsletter")
-    prompt_image_humour: str = Field(description="Description détaillée en anglais d'une illustration créative, humoristique ou métaphorique en lien avec la situation initiale ou la blague du texte")
+    # Construction d'un prompt beaucoup plus précis et contextuel pour l'IA
+    prompt_image_sur_mesure = f"""
+    Professional commercial illustration, high quality, vibrant colors. 
+    The subject is related to: {theme_recherche}. 
+    Context of the business offering: {prosp_offre}.
+    Visual details: A clean, modern, professional workplace or business scene illustrating {theme_recherche} in a local market, 
+    no weird text, highly detailed, photorealistic corporate style.
+    """
+
     categorie_produit: str = Field(description="Un seul mot-clé en anglais parmi cette liste pour la vraie photo pro : 'businesscard', 'storefront', 'signage', 'restaurant', 'printing'")
 
 def calculer_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

@@ -775,7 +775,7 @@ with tab2:
                 })
                 st.rerun()
     else:
-        rayon_km = int(reg["rayon_km"])
+        rayon_km = int(REGLAGES_PAR_DEFAUT["rayon_km"])
         villes_cp = identifier_communes_cp(codes_postaux)
         if villes_cp:
             st.caption(f"📍 **Variable de lieu détectée pour l'IA :** {', '.join(villes_cp[:6])} ({codes_postaux})")

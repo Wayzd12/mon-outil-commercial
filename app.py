@@ -367,7 +367,7 @@ def chercher_entreprises_pool(
     tous_types: bool,
     renouveler: bool
 ):
-    """Récupère un vivier élargi d'entreprises locales en augmentant les pages et la taille des requêtes."""
+    """Récupère un vivier élargi d'entreprises locales en augmentant le nombre de pages (per_page=25 max exigé par l'API)."""
     vivier_brut = {}
     mots_cles_list = [] if tous_types else extraire_mots_cles_significatifs(mot_cle)
     exclure_sci = True if tous_types else (not any(m in mot_cle.lower() for m in ["immobilier", "sci", "foncier", "location"]))
@@ -389,14 +389,13 @@ def chercher_entreprises_pool(
     if mode_zone:
         _, cps_gps, code_dept = identifier_commune_gps(zone_lat, zone_lon)
 
-        # 1. Recherche par mots-clés élargie sur le département
+        # 1. Recherche par mots-clés élargie sur le département (pages 1 à 6)
         if not tous_types and mots_cles_list and code_dept:
             url_search = "https://recherche-entreprises.api.gouv.fr/search"
             requetes_q = [mot_cle.strip()] if len(mots_cles_list) > 1 else []
             requetes_q.extend(mots_cles_list)
             for terme in dict.fromkeys(requetes_q):
-                # On interroge plus de pages (jusqu'à 5 pages de 50 résultats)
-                pages_q = [1, 2, 3, 4, 5] if not renouveler else [1, random.randint(2, 4), random.randint(5, 6)]
+                pages_q = [1, 2, 3, 4, 5, 6] if not renouveler else [1, 2, 3, 4, 5, 6]
                 for page_q in dict.fromkeys(pages_q):
                     try:
                         rep_q = requests.get(
@@ -405,7 +404,7 @@ def chercher_entreprises_pool(
                                 "q": terme,
                                 "departement": code_dept,
                                 "etat_administratif": "A",
-                                "per_page": 50,  # Augmenté à 50
+                                "per_page": 25,  # MAXIMUM AUTORISÉ PAR L'API
                                 "page": page_q
                             },
                             timeout=8
@@ -414,16 +413,15 @@ def chercher_entreprises_pool(
                             ajouter_depuis_reponse(rep_q.json(), [])
                     except Exception:
                         pass
-                    if len(vivier_brut) >= 120:  # Plafond de sécurité relevé
+                    if len(vivier_brut) >= 120:
                         break
                 if len(vivier_brut) >= 120:
                     break
 
-        # 2. Recherche géographique par point élargie (/near_point)
+        # 2. Recherche géographique par point élargie (/near_point - pages 1 à 8)
         if tous_types or len(vivier_brut) < 50:
             url_geo = "https://recherche-entreprises.api.gouv.fr/near_point"
-            # On balaie 6 pages au lieu de 3
-            pages_geo = [1, 2, 3, 4, 5, 6] if not renouveler else [1, 2, random.randint(3, 4), random.randint(5, 6)]
+            pages_geo = [1, 2, 3, 4, 5, 6, 7, 8] if not renouveler else [1, 2, 3, 4, 5, 6, 7, 8]
             for p in dict.fromkeys(pages_geo):
                 try:
                     rep = requests.get(
@@ -432,7 +430,7 @@ def chercher_entreprises_pool(
                             "lat": round(zone_lat, 5),
                             "long": round(zone_lon, 5),
                             "radius": rayon_km,
-                            "per_page": 50,  # Augmenté à 50
+                            "per_page": 25,  # MAXIMUM AUTORISÉ PAR L'API
                             "page": p
                         },
                         timeout=10
@@ -455,7 +453,7 @@ def chercher_entreprises_pool(
                     try:
                         rep1 = requests.get(
                             url,
-                            params={"q": terme, "code_postal": cp, "etat_administratif": "A", "per_page": 50, "page": 1},
+                            params={"q": terme, "code_postal": cp, "etat_administratif": "A", "per_page": 25, "page": 1},
                             timeout=8
                         )
                         if rep1.status_code == 200:
@@ -463,10 +461,10 @@ def chercher_entreprises_pool(
                             ajouter_depuis_reponse(json1, codes)
                             total_pages = int(json1.get("total_pages", 1))
                             if total_pages > 1:
-                                for p_idx in range(2, min(total_pages + 1, 6)):
+                                for p_idx in range(2, min(total_pages + 1, 8)):
                                     rep_p = requests.get(
                                         url,
-                                        params={"q": terme, "code_postal": cp, "etat_administratif": "A", "per_page": 50, "page": p_idx},
+                                        params={"q": terme, "code_postal": cp, "etat_administratif": "A", "per_page": 25, "page": p_idx},
                                         timeout=8
                                     )
                                     if rep_p.status_code == 200:
@@ -475,11 +473,11 @@ def chercher_entreprises_pool(
                         pass
 
             if tous_types or len(vivier_brut) < 30:
-                for p_large in range(1, 5):
+                for p_large in range(1, 6):
                     try:
                         rep_large = requests.get(
                             url,
-                            params={"code_postal": cp, "etat_administratif": "A", "per_page": 50, "page": p_large},
+                            params={"code_postal": cp, "etat_administratif": "A", "per_page": 25, "page": p_large},
                             timeout=8
                         )
                         if rep_large.status_code == 200:
@@ -493,7 +491,8 @@ def chercher_entreprises_pool(
     else:
         liste_propre.sort(key=lambda x: str(x.get("creation") or "0000"), reverse=True)
 
-    return liste_propre[:80]  # On relève la limite finale renvoyée à 80 pour nourrir le batching
+    return liste_propre[:80]
+
 
 
 # --- 7. BARRE DE SAUVEGARDE PERMANENTE DES RÉGLAGES ---

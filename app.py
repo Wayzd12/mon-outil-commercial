@@ -229,6 +229,7 @@ class ListeAnalyses(BaseModel):
 
 class NewsletterReponse(BaseModel):
     texte_newsletter: str = Field(description="Le texte complet et prêt à publier de la newsletter")
+   
     # Construction d'un prompt beaucoup plus précis et contextuel pour l'IA
     prompt_image_sur_mesure = f"""
     Professional commercial illustration, high quality, vibrant colors. 

@@ -9,6 +9,7 @@ import requests
 import feedparser
 import urllib.parse
 import folium
+import streamlit as st
 from streamlit_folium import st_folium
 from concurrent.futures import ThreadPoolExecutor
 from google import genai

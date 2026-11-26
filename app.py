@@ -604,11 +604,9 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                 with col_images:
                     st.subheader("Visuels")
                     
-                    # 1. Tentative de récupération de l'image IA avec le cycle de sécurité (3s d'attente si occupé)
                     with st.spinner("Génération des visuels en cours..."):
                         img_bytes = recuperer_image_ia_securisee(donnees_nl.prompt_image_humour)
                     
-                    # 2. Vraie photo professionnelle Unsplash (instantanée)
                     cat = donnees_nl.categorie_produit.lower()
                     if "card" in cat:
                         unsplash_id = "1633533824538-2321522f77dd"
@@ -620,37 +618,28 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                         unsplash_id = "1562564055-71e051d33c19"
                     url_img_pro = f"https://images.unsplash.com/photo-{unsplash_id}?w=600&h=600&fit=crop"
                     
-                    # Conversion de l'image IA en données affichables si elle a réussi
                     src_ia = ""
                     if img_bytes:
                         import base64
                         encoded_img = base64.b64encode(img_bytes).decode('utf-8')
                         src_ia = f"data:image/jpeg;base64,{encoded_img}"
-                    # Affichage propre des visuels dans la colonne de droite (sans dépassement)
-                    if src_ia:
-                        st.image(src_ia, caption="Visuel IA", use_container_width=True)
-                    else:
-                        st.info("Visuel IA indisponible.")
                         
-                    if url_img_pro:
-                        st.image(url_img_pro, caption="Visuel Professionnel", use_container_width=True)
-                        
-                    # Affichage côte à côte propre via HTML, sans aucune légende
                     if src_ia:
                         html_images = f"""
                         <div style="display: flex; gap: 10px; height: 485px; align-items: stretch; margin-top: 8px;">
-                            <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="Visuel IA">
                                 <img src="{src_ia}" style="width: 100%; height: 100%; object-fit: cover;">
                             </div>
-                            <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <div style="flex: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="Visuel Professionnel">
                                 <img src="{url_img_pro}" style="width: 100%; height: 100%; object-fit: cover;">
                             </div>
                         </div>
                         """
                         st.markdown(html_images, unsafe_allow_html=True)
                     else:
-                        st.warning("⏳ Image en cours de chargement (serveurs IA occupés)... Réessaie dans un instant.")
-                        st.image(url_img_pro, use_container_width=True)
+                        st.warning("⏳ Image en cours de chargement...")
+                        st.image(url_img_pro, use_container_width=True, height=485)
+
                 
             except Exception as e:
                 st.error(f"Erreur de lecture de la réponse IA : {e}")
@@ -667,13 +656,13 @@ with tab2:
     carte_active = bool(st.session_state["mode_carte_zone"])
     tous_types_actif = bool(st.session_state["check_tous_types"])
 
-    col_loc, col_btn_carte, col_act = st.columns([2, 1.3, 2.2])
+    col_loc, col_btn_carte, col_act_input, col_act_check = st.columns([2, 1.3, 1.8, 1.1])
 
     with col_loc:
         aide_cp = (
             "Sélection sur carte activée"
             if carte_active
-            else "Tu peux mettre un seul code postal (ex: 34670) ou plusieurs séparés par une virgule."
+            else "Tu peux mettre un seul code postal ou plusieurs séparés par une virgule."
         )
         codes_postaux = st.text_input(
             "Code(s) postal(aux) :",
@@ -686,26 +675,35 @@ with tab2:
         st.write("")
         st.write("")
         label_bouton_carte = (
-            "❌ Revenir aux codes postaux"
+            "❌ Revenir aux codes"
             if carte_active
-            else "🗺️ Choisir sur la carte"
+            else "🗺️ Choisir carte"
         )
         if st.button(label_bouton_carte, use_container_width=True):
             st.session_state["mode_carte_zone"] = not carte_active
             st.rerun()
 
-    with col_act:
+    with col_act_input:
         aide_activite = (
             "Tous types d'activités activé"
             if tous_types_actif
-            else "Ex: boulangerie, artisans de chantier, jeunes entreprises, agences..."
+            else "Ex: boulangerie, artisans, agences..."
         )
         theme_recherche = st.text_input(
-            "Thème ou mot-clé à interpréter par l'IA :",
+            "Thème / mot-clé :",
             value="commerces avec vitrine ou restaurants",
             disabled=tous_types_actif,
             help=aide_activite
         )
+
+    with col_act_check:
+        st.write("")
+        st.write("")
+        tous_types = st.checkbox(
+            "🌐 Tous types",
+            key="check_tous_types"
+        )
+
 
     # --- SÉLECTEUR DE ZONE INTERACTIF ---
     if st.session_state["mode_carte_zone"]:
@@ -939,17 +937,21 @@ MISSION :
                         })
 
             if tableau:
-                # Tri par note décroissante
                 tableau.sort(key=lambda x: x["Note /10"], reverse=True)
                 st.success(f"✅ {len(tableau)} prospect(s) pertinent(s) trouvé(s) et consolidé(s) sur {lieu_cible} !")
 
                 if (not tous_types) and len(tableau) < limite:
                     st.info(f"ℹ️ {len(tableau)} entreprise(s) correspondent réellement à « {theme_recherche} » dans cette zone.")
 
-                # Affichage du tableau Pandas
-                st.dataframe(tableau, use_container_width=True)
+                # Ajout d'une colonne visuelle 📍 pour l'icône map dans le tableau
+                tableau_affichage = []
+                for row in tableau:
+                    r_copie = row.copy()
+                    r_copie["Map"] = "📍"
+                    tableau_affichage.append(r_copie)
 
-                # Bouton de téléchargement CSV
+                st.dataframe(tableau_affichage, use_container_width=True)
+
                 buffer_csv = io.StringIO()
                 writer = csv.DictWriter(buffer_csv, fieldnames=tableau[0].keys(), delimiter=";")
                 writer.writeheader()
@@ -961,13 +963,23 @@ MISSION :
                     mime="text/csv"
                 )
 
-                # Affichage de la carte Folium avec les résultats
                 if marqueurs_carte:
                     st.subheader("🗺️ Localisation et noms des prospects trouvés")
-                    centre_lat = sum(m["lat"] for m in marqueurs_carte) / len(marqueurs_carte)
-                    centre_lon = sum(m["lon"] for m in marqueurs_carte) / len(marqueurs_carte)
+                    
+                    # Sélecteur pour centrer la carte sur un prospect spécifique
+                    noms_prospects = [m["nom"] for m in marqueurs_carte]
+                    choix_centrage = st.selectbox("🎯 Centrer rapidement la carte sur un prospect :", ["-- Vue globale de la zone --"] + noms_prospects)
+                    
+                    if choix_centrage != "-- Vue globale de la zone --":
+                        prospect_cible = next(m for m in marqueurs_carte if m["nom"] == choix_centrage)
+                        centre_lat, centre_lon = prospect_cible["lat"], prospect_cible["lon"]
+                        zoom_carte = 16  # Zoom rapproché sur le prospect
+                    else:
+                        centre_lat = sum(m["lat"] for m in marqueurs_carte) / len(marqueurs_carte)
+                        centre_lon = sum(m["lon"] for m in marqueurs_carte) / len(marqueurs_carte)
+                        zoom_carte = 12
 
-                    carte_resultats = folium.Map(location=[centre_lat, centre_lon], zoom_start=12)
+                    carte_resultats = folium.Map(location=[centre_lat, centre_lon], zoom_start=zoom_carte)
 
                     if st.session_state["mode_carte_zone"]:
                         folium.Circle(
@@ -988,13 +1000,8 @@ MISSION :
                         folium.Marker(
                             location=[m["lat"], m["lon"]],
                             popup=folium.Popup(fiche_html, max_width=280),
-                            tooltip=folium.Tooltip(
-                                f"<b>{m['nom']}</b>",
-                                permanent=True,
-                                direction="top",
-                                sticky=False,
-                                offset=(0, -36)
-                            ),
+                            # permanent=False pour n'afficher le nom qu'au survol / en s'approchant
+                            tooltip=folium.Tooltip(f"<b>{m['nom']}</b>", permanent=False),
                             icon=folium.Icon(color="green", icon="briefcase", prefix="fa")
                         ).add_to(carte_resultats)
 
@@ -1005,6 +1012,7 @@ MISSION :
                         returned_objects=[],
                         key="carte_resultats_prospects"
                     )
+
             else:
                 if tous_types:
                     st.warning("L'IA n'a retenu aucune entreprise sur cette tentative. Clique à nouveau sur Rechercher.")

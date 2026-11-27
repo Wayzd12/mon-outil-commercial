@@ -265,7 +265,6 @@ class ListeAnalyses(BaseModel):
 
 class NewsletterReponse(BaseModel):
     texte_newsletter: str = Field(description="Le texte complet et professionnel de la publication.")
-    prompt_image_humour: str = Field(description="A detailed English visual prompt for Pollinations.ai describing a clean, modern, professional corporate illustration related to the topic.")
     categorie_produit: str = Field(description="Un seul mot-clé en anglais parmi cette liste pour la vraie photo pro : 'businesscard', 'storefront', 'signage', 'restaurant', 'printing'")
 
 def calculer_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -660,10 +659,18 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
             st.error(f"Erreur lors de la génération : {erreur_ia}")
         elif texte_newsletter_genere:
             st.success("✅ Newsletter générée avec succès !")
-            
-            # Stockage en session pour persistance
-            st.session_state["derniere_newsletter"] = texte_newsletter_genere
-            st.session_state["derniere_image_nl"] = image_selectionnee
+
+        # 2. C'est ICI qu'on place le code pour l'image automatique et le stockage en session :
+        if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
+            # On utilise directement le mot-clé propre renvoyé par Gemini (ex: 'printing', 'storefront'...)
+            image_selectionnee = obtenir_image_internet_dynamique(resultat_ia.categorie_produit)
+        else:
+            # Si tu avais choisi une recherche manuelle ou un import PC, on garde ta sélection
+            image_selectionnee = image_selectionnee 
+
+        # 3. Stockage en session pour l'affichage persistant en 2 colonnes
+        st.session_state["derniere_newsletter"] = resultat_ia.texte_newsletter
+        st.session_state["derniere_image_nl"] = image_selectionnee
 
 # 4. Affichage persistant du résultat si présent en mémoire (Disposition 2 colonnes : Texte à gauche | Image à droite)
     if "derniere_newsletter" in st.session_state and st.session_state["derniere_newsletter"]:

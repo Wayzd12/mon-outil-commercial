@@ -679,34 +679,34 @@ RÈGLES VISUELLES STRICTES DE MISE EN PAGE :
 
 Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'introduction avant le titre."""
 
-with st.spinner("✍️ Rédaction de la newsletter par l'IA..."):
-            reponse_brute, erreur_ia = appeler_gemini_patient(prompt_complet, schema=NewsletterReponse, temperature=0.7)
-
-        if erreur_ia:
-            st.error(f"Erreur lors de la génération : {erreur_ia}")
-        elif reponse_brute:
-            try:
-                resultat_ia = NewsletterReponse.model_validate_json(reponse_brute)
-                
-                if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
-                    image_selectionnee = obtenir_image_internet_dynamique(resultat_ia.categorie_produit)
-                
-                # NETTOYAGE AUTOMATIQUE : On force de vrais retours à la ligne autour des séparateurs ---
-                texte_formate = (
-                    resultat_ia.texte_newsletter
-                    .replace(" --- ", "\n\n---\n\n")
-                    .replace("---", "\n\n---\n\n")
-                )
-                
-                # Stockage en session du texte parfaitement aéré
-                st.session_state["derniere_newsletter"] = texte_formate
-                st.session_state["derniere_image_nl"] = image_selectionnee
-                
-                st.success("✅ Newsletter générée avec succès !")
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"Erreur de formatage de la réponse par l'IA : {e}")
+        with st.spinner("✍️ Rédaction de la newsletter par l'IA..."):
+                    reponse_brute, erreur_ia = appeler_gemini_patient(prompt_complet, schema=NewsletterReponse, temperature=0.7)
+        
+                if erreur_ia:
+                    st.error(f"Erreur lors de la génération : {erreur_ia}")
+                elif reponse_brute:
+                    try:
+                        resultat_ia = NewsletterReponse.model_validate_json(reponse_brute)
+                        
+                        if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
+                            image_selectionnee = obtenir_image_internet_dynamique(resultat_ia.categorie_produit)
+                        
+                        # NETTOYAGE AUTOMATIQUE : On force de vrais retours à la ligne autour des séparateurs ---
+                        texte_formate = (
+                            resultat_ia.texte_newsletter
+                            .replace(" --- ", "\n\n---\n\n")
+                            .replace("---", "\n\n---\n\n")
+                        )
+                        
+                        # Stockage en session du texte parfaitement aéré
+                        st.session_state["derniere_newsletter"] = texte_formate
+                        st.session_state["derniere_image_nl"] = image_selectionnee
+                        
+                        st.success("✅ Newsletter générée avec succès !")
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Erreur de formatage de la réponse par l'IA : {e}")
 
     # 4. Affichage persistant du résultat si présent en mémoire (Disposition 2 colonnes)
     if "derniere_newsletter" in st.session_state and st.session_state["derniere_newsletter"]:

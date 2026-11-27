@@ -578,7 +578,7 @@ with tab1:
         "🍽️ Restaurants & Métiers de bouche : valoriser ses menus et sa carte",
         "🎁 Préparer ses événements commerciaux et opérations saisonnières",
         "💾 L'importance des petites signalétiques : Clé USB, Stylo etc personnalisé",
-        "✍️ Saisir un sujet personnalisé libre..."
+        "🗺️ Les plans ( ou les modèles 3D )  d'un site comme une ville, une maison, un parc, etc"
     ]
 
     choix_theme = st.selectbox(

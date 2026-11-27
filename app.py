@@ -605,59 +605,58 @@ with tab1:
 
     st.markdown("---")
     
-    # 2. Sélection de l'image (Automatique, Mot-clé ou Import PC)
-st.subheader("🌐 Illustration de la publication (En direct du web)")
+# 2. Sélection de l'image (Automatique, Mot-clé ou Import PC)
+    st.subheader("🌐 Illustration de la publication (En direct du web)")
 
-mode_image = st.radio(
-    "Source de l'image :",
-    [
-        "🤖 Automatique (selon le sujet de la newsletter)", 
-        "🔍 Taper un mot-clé précis pour chercher sur Internet",
-        "💻 Importer une photo depuis mon ordinateur"
-    ],
-    key="radio_mode_internet"
-)
-
-image_selectionnee = None
-
-if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
-    mots_cles_auto = " ".join(sujet_final.split()[:3])
-    image_selectionnee = obtenir_image_internet_dynamique(mots_cles_auto)
-
-elif mode_image == "🔍 Taper un mot-clé précis pour chercher sur Internet":
-    mot_cle_libre = st.text_input(
-        "Entrez un mot-clé (ex: printing press, modern shop, construction...)", 
-        value="printing press", 
-        key="input_mot_cle_libre"
+    mode_image = st.radio(
+        "Source de l'image :",
+        [
+            "🤖 Automatique (selon le sujet de la newsletter)", 
+            "🔍 Taper un mot-clé précis pour chercher sur Internet",
+            "💻 Importer une photo depuis mon ordinateur"
+        ],
+        key="radio_mode_internet"
     )
-    image_selectionnee = obtenir_image_internet_dynamique(mot_cle_libre)
 
-elif mode_image == "💻 Importer une photo depuis mon ordinateur":
-    fichier_upload = st.file_uploader(
-        "Téléchargez votre propre image (JPG, PNG)", 
-        type=["jpg", "jpeg", "png"], 
-        key="uploader_image_locale_nl"
-    )
-    if fichier_upload is not None:
-        image_selectionnee = fichier_upload
+    image_selectionnee = None
 
-# Affichage compact et centré de l'image sélectionnée
-if image_selectionnee is not None:
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.image(image_selectionnee, width=450, caption="Aperçu de l'image sélectionnée")
-   
+    if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
+        mots_cles_auto = " ".join(sujet_final.split()[:3])
+        image_selectionnee = obtenir_image_internet_dynamique(mots_cles_auto)
+
+    elif mode_image == "🔍 Taper un mot-clé précis pour chercher sur Internet":
+        mot_cle_libre = st.text_input(
+            "Entrez un mot-clé (ex: printing press, modern shop, construction...)", 
+            value="printing press", 
+            key="input_mot_cle_libre"
+        )
+        image_selectionnee = obtenir_image_internet_dynamique(mot_cle_libre)
+
+    elif mode_image == "💻 Importer une photo depuis mon ordinateur":
+        fichier_upload = st.file_uploader(
+            "Téléchargez votre propre image (JPG, PNG)", 
+            type=["jpg", "jpeg", "png"], 
+            key="uploader_image_locale_nl"
+        )
+        if fichier_upload is not None:
+            image_selectionnee = fichier_upload
+
+    # Affichage compact et centré de l'image sélectionnée
+    if image_selectionnee is not None:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.image(image_selectionnee, width=450, caption="Aperçu de l'image sélectionnée")
+       
     st.markdown("---")
 
     # 3. Bouton de génération de la newsletter par Gemini
-# 3. Bouton de génération de la newsletter par Gemini
-if st.button("✨ Rédiger la Newsletter", type="primary", key="btn_generer_newsletter_pro"):
+    if st.button("✨ Rédiger la Newsletter", type="primary", key="btn_generer_newsletter_pro"):
         
         prompt_complet = f"""Tu es le dirigeant de : {p_identite}.
 Rédige une édition INÉDITE et ORIGINALE de newsletter LinkedIn destinée aux dirigeants, commerçants et artisans locaux.
 
 SUJET À TRAITER : {sujet_final}
-INSPIRATION DU MOMENT : {actu_du_jour}
+INSPIRATION DU MOMENT (facultative, à relier naturellement si pertinent) : {actu_du_jour}
 STYLE ET TON : {p_style}
 
 STRUCTURE OBLIGATOIRE À SUIVRE :
@@ -668,7 +667,7 @@ STRUCTURE OBLIGATOIRE À SUIVRE :
 RÈGLES VISUELLES STRICTES DE MISE EN PAGE :
 - Aère le texte au maximum avec des paragraphes très courts (3 lignes max).
 - Utilise un émoji pertinent en début de chaque bloc ou conseil (ex: 💡, 📐, 🖨️, 📍).
-- Sépare CHAQUE grande partie par une ligne contenant uniquement : ---
+- Sépare CHAQUE grande partie (titre, introduction, chaque conseil, conclusion) par une ligne contenant uniquement : ---
 
 Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'introduction avant le titre."""
 
@@ -681,7 +680,6 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
             try:
                 resultat_ia = NewsletterReponse.model_validate_json(reponse_brute)
                 
-                # Récupération dynamique Wikimedia basée sur la catégorie propre de l'IA
                 if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
                     image_selectionnee = obtenir_image_internet_dynamique(resultat_ia.categorie_produit)
                 
@@ -693,21 +691,18 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                 
             except Exception as e:
                 st.error(f"Erreur de formatage de la réponse par l'IA : {e}")
-                
-# 4. Affichage persistant du résultat si présent en mémoire (Disposition 2 colonnes : Texte à gauche | Image à droite)
+
+    # 4. Affichage persistant du résultat si présent en mémoire (Disposition 2 colonnes)
     if "derniere_newsletter" in st.session_state and st.session_state["derniere_newsletter"]:
         st.markdown("---")
         st.subheader("📋 Résultat prêt à être publié")
         
-        # On crée 2 colonnes de largeur égale (50% / 50%)
         col_texte, col_image = st.columns(2)
         
-        # Colonne de gauche : Le texte de la newsletter dans un conteneur aéré
         with col_texte:
             with st.container(border=True):
                 st.markdown(st.session_state["derniere_newsletter"])
                 
-            # Bouton de téléchargement sous le texte
             st.download_button(
                 label="📥 Télécharger (.txt)",
                 data=st.session_state["derniere_newsletter"].encode("utf-8"),
@@ -716,10 +711,8 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                 key="btn_download_txt_nl"
             )
             
-        # Colonne de droite : L'image sélectionnée (qui prend toute la largeur de sa colonne)
         with col_image:
             if "derniere_image_nl" in st.session_state and st.session_state["derniere_image_nl"]:
-                # Si c'est un fichier uploadé depuis l'ordi ou une URL du web
                 st.image(
                     st.session_state["derniere_image_nl"], 
                     caption="Visuel associé à la publication", 

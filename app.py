@@ -91,28 +91,35 @@ import random
 def obtenir_image_internet_dynamique(sujet):
     sujet_lower = sujet.lower()
     
-    # 1. Conversion du thème ou de la catégorie Pydantic en mots-clés Wikimedia
+    # Dictionnaire de correspondances strictes et variées pour l'imprimerie et la communication locale
     if any(m in sujet_lower for m in ["vitrine", "enseigne", "commerce", "magasin", "boutique", "storefront"]):
-        mot_cle = random.choice(["storefront", "shop window", "retail store", "neon sign"])
+        banque_mots = ["storefront window display", "retail shop interior", "neon store sign", "boutique storefront", "shop window merchandising"]
     elif any(m in sujet_lower for m in ["chantier", "panneau", "immobilier", "travaux", "bâtiment", "signage"]):
-        mot_cle = random.choice(["construction site", "architectural blueprint", "building construction", "real estate sign"])
-    elif any(m in sujet_lower for m in ["restaurant", "menu", "carte", "bouche"]):
-        mot_cle = random.choice(["restaurant menu", "cafe interior", "bakery display", "bistro"])
+        banque_mots = ["construction site banner", "real estate sign board", "building development site", "architectural signage", "safety construction sign"]
+    elif any(m in sujet_lower for m in ["restaurant", "menu", "carte", "bouche", "restauration"]):
+        banque_mots = ["restaurant table menu", "cafe blackboard menu", "bistro interior display", "gourmet food menu design", "restaurant chalkboard"]
     elif any(m in sujet_lower for m in ["imprimerie", "flyer", "carte de visite", "imprimé", "brochure", "printing", "businesscard"]):
-        mot_cle = random.choice(["printing press", "offset printing", "graphic design", "paper printing"])
-    elif any(m in sujet_lower for m in ["événement", "saisonnière", "fête"]):
-        mot_cle = random.choice(["trade show booth", "exhibition stand", "event banner"])
+        banque_mots = ["offset printing press machine", "business cards printing", "stacks of flyers and brochures", "paper printing workshop", "graphic design print shop"]
+    elif any(m in sujet_lower for m in ["événement", "saisonnière", "fête", "salon"]):
+        banque_mots = ["trade show exhibition booth", "roll up banner display", "promotional event banner", "marketing rollup stand"]
+    elif any(m in sujet_lower for m in ["objet", "goodies", "stylo", "clé usb", "signalétique"]):
+        banque_mots = ["promotional merchandise items", "custom branded pens", "corporate gift products", "engraved office plaques"]
     else:
-        mot_cle = sujet.strip()
+        # Si c'est un sujet totalement libre saisi par l'utilisateur, on l'utilise directement en anglais/français
+        banque_mots = [sujet.strip(), f"professional {sujet.strip()}", f"business {sujet.strip()}"]
 
-    decalage_aleatoire = random.randint(0, 30)
+    # On pioche un mot-clé au hasard dans la liste ciblée pour garantir de la variété
+    mot_cle = random.choice(banque_mots)
+
+    # Grand décalage aléatoire (entre 0 et 50) pour explorer les profondeurs de Wikimedia et éviter les mêmes images
+    decalage_aleatoire = random.randint(0, 50)
     url_api = "https://commons.wikimedia.org/w/api.php"
     params = {
         "action": "query",
         "generator": "search",
         "gsrsearch": f"filetype:bitmap {mot_cle}",
         "gsrnamespace": 6,
-        "gsrlimit": 25,
+        "gsrlimit": 30,
         "gsroffset": decalage_aleatoire,
         "prop": "imageinfo",
         "iiprop": "url",
@@ -134,17 +141,18 @@ def obtenir_image_internet_dynamique(sujet):
                 infos = page.get("imageinfo", [{}])[0]
                 url_img = infos.get("thumburl") or infos.get("url")
                 if url_img:
-                    # CORRECTION : On vérifie l'extension dans le chemin de l'URL pour accepter les miniatures Wikimedia
                     parsed_path = urllib.parse.urlparse(url_img).path.lower()
                     if any(parsed_path.endswith(ext) for ext in [".jpg", ".jpeg", ".png"]):
                         urls_valides.append(url_img)
                     
             if urls_valides:
-                return random.choice(urls_valides)
+                # Mélange de la liste et choix aléatoire parmi les résultats trouvés
+                random.shuffle(urls_valides)
+                return urls_valides[0]
     except Exception:
         pass
         
-    # Secours en cas de panne réseau avérée
+    # Secours varié si l'API Wikimedia rencontre un raté
     secours = [
         "https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80",
         "https://images.unsplash.com/photo-1581091226825-a6a25aee158?w=800&q=80",

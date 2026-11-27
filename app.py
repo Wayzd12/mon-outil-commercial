@@ -569,7 +569,7 @@ with tab1:
         "🏗️ Signalétique de chantier et panneaux immobiliers : être visible sur le terrain",
         "🍽️ Restaurants & Métiers de bouche : valoriser ses menus et sa carte",
         "🎁 Préparer ses événements commerciaux et opérations saisonnières",
-        "💾 L'importance des petites siganletiques : Clé USB, Stylo etc personnalisé",
+        "💾 L'importance des petites signalétiques : Clé USB, Stylo etc personnalisé",
         "✍️ Saisir un sujet personnalisé libre..."
     ]
 

@@ -524,46 +524,46 @@ with tab1:
     
     # 2. Sélection de l'image (Automatique, Mot-clé ou Import PC)
 st.subheader("🌐 Illustration de la publication (En direct du web)")
-    
-    mode_image = st.radio(
-        "Source de l'image :",
-        [
-            "🤖 Automatique (selon le sujet de la newsletter)", 
-            "🔍 Taper un mot-clé précis pour chercher sur Internet",
-            "💻 Importer une photo depuis mon ordinateur"
-        ],
-        key="radio_mode_internet"
+
+mode_image = st.radio(
+    "Source de l'image :",
+    [
+        "🤖 Automatique (selon le sujet de la newsletter)", 
+        "🔍 Taper un mot-clé précis pour chercher sur Internet",
+        "💻 Importer une photo depuis mon ordinateur"
+    ],
+    key="radio_mode_internet"
+)
+
+image_selectionnee = None
+
+if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
+    mots_cles_auto = " ".join(sujet_final.split()[:3])
+    image_selectionnee = obtenir_image_internet_dynamique(mots_cles_auto)
+
+elif mode_image == "🔍 Taper un mot-clé précis pour chercher sur Internet":
+    mot_cle_libre = st.text_input(
+        "Entrez un mot-clé (ex: printing press, modern shop, construction...)", 
+        value="printing press", 
+        key="input_mot_cle_libre"
     )
+    image_selectionnee = obtenir_image_internet_dynamique(mot_cle_libre)
 
-    image_selectionnee = None
+elif mode_image == "💻 Importer une photo depuis mon ordinateur":
+    fichier_upload = st.file_uploader(
+        "Téléchargez votre propre image (JPG, PNG)", 
+        type=["jpg", "jpeg", "png"], 
+        key="uploader_image_locale_nl"
+    )
+    if fichier_upload is not None:
+        image_selectionnee = fichier_upload
 
-    if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
-        mots_cles_auto = " ".join(sujet_final.split()[:3])
-        image_selectionnee = obtenir_image_internet_dynamique(mots_cles_auto)
-
-    elif mode_image == "🔍 Taper un mot-clé précis pour chercher sur Internet":
-        mot_cle_libre = st.text_input(
-            "Entrez un mot-clé (ex: printing press, modern shop, construction...)", 
-            value="printing press", 
-            key="input_mot_cle_libre"
-        )
-        image_selectionnee = obtenir_image_internet_dynamique(mot_cle_libre)
-
-    elif mode_image == "💻 Importer une photo depuis mon ordinateur":
-        fichier_upload = st.file_uploader(
-            "Téléchargez votre propre image (JPG, PNG)", 
-            type=["jpg", "jpeg", "png"], 
-            key="uploader_image_locale_nl"
-        )
-        if fichier_upload is not None:
-            image_selectionnee = fichier_upload
-
-    # Affichage compact et centré de l'image sélectionnée
-    if image_selectionnee is not None:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.image(image_selectionnee, width=450, caption="Aperçu de l'image sélectionnée")
-
+# Affichage compact et centré de l'image sélectionnée
+if image_selectionnee is not None:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image(image_selectionnee, width=450, caption="Aperçu de l'image sélectionnée")
+   
     st.markdown("---")
 
     # 3. Bouton de génération de la newsletter par Gemini

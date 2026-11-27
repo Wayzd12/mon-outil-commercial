@@ -615,26 +615,39 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
             st.session_state["derniere_newsletter"] = texte_newsletter_genere
             st.session_state["derniere_image_nl"] = image_selectionnee
 
-    # 4. Affichage persistant du résultat si présent en mémoire
+# 4. Affichage persistant du résultat si présent en mémoire (Disposition 2 colonnes : Texte à gauche | Image à droite)
     if "derniere_newsletter" in st.session_state and st.session_state["derniere_newsletter"]:
+        st.markdown("---")
         st.subheader("📋 Résultat prêt à être publié")
         
-        # Affichage de l'image retenue
-        if "derniere_image_nl" in st.session_state and st.session_state["derniere_image_nl"]:
-            st.image(st.session_state["derniere_image_nl"], caption="Visuel associé à la publication", use_container_width=True)
+        # On crée 2 colonnes de largeur égale (50% / 50%)
+        col_texte, col_image = st.columns(2)
+        
+        # Colonne de gauche : Le texte de la newsletter dans un conteneur aéré
+        with col_texte:
+            with st.container(border=True):
+                st.markdown(st.session_state["derniere_newsletter"])
+                
+            # Bouton de téléchargement sous le texte
+            st.download_button(
+                label="📥 Télécharger (.txt)",
+                data=st.session_state["derniere_newsletter"].encode("utf-8"),
+                file_name="newsletter_imprimerie.txt",
+                mime="text/plain",
+                key="btn_download_txt_nl"
+            )
             
-        # Affichage du texte dans un conteneur aéré avec bordure
-        with st.container(border=True):
-            st.markdown(st.session_state["derniere_newsletter"])
-            
-        # Bouton de copie / téléchargement rapide
-        st.download_button(
-            label="📥 Télécharger le texte de la newsletter (.txt)",
-            data=st.session_state["derniere_newsletter"].encode("utf-8"),
-            file_name="newsletter_imprimerie.txt",
-            mime="text/plain",
-            key="btn_download_txt_nl"
-        )
+        # Colonne de droite : L'image sélectionnée (qui prend toute la largeur de sa colonne)
+        with col_image:
+            if "derniere_image_nl" in st.session_state and st.session_state["derniere_image_nl"]:
+                # Si c'est un fichier uploadé depuis l'ordi ou une URL du web
+                st.image(
+                    st.session_state["derniere_image_nl"], 
+                    caption="Visuel associé à la publication", 
+                    use_container_width=True
+                )
+            else:
+                st.info("Aucune image sélectionnée.")
 
 # ==============================================================================
 # ONGLET 2 : PROSPECTION INTELLIGENTE & CARTE INTERACTIVE

@@ -85,18 +85,40 @@ def charger_reglages():
             
     return reglages
     
-def obtenir_image_internet_dynamique(mot_cle):
-    # API publique officielle de Wikimedia Commons (gratuite, sans clé, millions de photos)
+import requests
+import random
+
+def obtenir_image_internet_dynamique(sujet):
+    sujet_lower = sujet.lower()
+    
+    # 1. On convertit le thème français en mots-clés précis qui donnent des milliers de résultats sur Wikimedia
+    if any(m in sujet_lower for m in ["vitrine", "enseigne", "commerce", "magasin", "boutique"]):
+        mot_cle = random.choice(["storefront", "shop window", "retail store", "neon sign"])
+    elif any(m in sujet_lower for m in ["chantier", "panneau", "immobilier", "travaux", "bâtiment"]):
+        mot_cle = random.choice(["construction site", "architectural blueprint", "building construction", "real estate sign"])
+    elif any(m in sujet_lower for m in ["restaurant", "menu", "carte", "bouche"]):
+        mot_cle = random.choice(["restaurant menu", "cafe interior", "bakery display", "bistro"])
+    elif any(m in sujet_lower for m in ["imprimerie", "flyer", "carte de visite", "imprimé", "brochure"]):
+        mot_cle = random.choice(["printing press", "offset printing", "graphic design", "paper printing"])
+    elif any(m in sujet_lower for m in ["événement", "saisonnière", "fête"]):
+        mot_cle = random.choice(["trade show booth", "exhibition stand", "event banner"])
+    else:
+        # Si l'utilisateur a tapé un mot-clé libre, on l'utilise directement
+        mot_cle = sujet.strip()
+
+    # 2. Recherche sur Wikimedia Commons avec un décalage aléatoire (gsroffset) pour ne pas avoir toujours les 20 premières
+    decalage_aleatoire = random.randint(0, 30)
     url_api = "https://commons.wikimedia.org/w/api.php"
     params = {
         "action": "query",
         "generator": "search",
         "gsrsearch": f"filetype:bitmap {mot_cle}",
-        "gsrnamespace": 6,  # Espace des fichiers médias
-        "gsrlimit": 20,     # Récupère 20 résultats pour pouvoir piocher au hasard
+        "gsrnamespace": 6,
+        "gsrlimit": 20,
+        "gsroffset": decalage_aleatoire,
         "prop": "imageinfo",
         "iiprop": "url",
-        "iiurlwidth": 800,  # Demande une version redimensionnée propre et rapide
+        "iiurlwidth": 800,
         "format": "json"
     }
     headers = {
@@ -113,7 +135,6 @@ def obtenir_image_internet_dynamique(mot_cle):
             for page in pages.values():
                 infos = page.get("imageinfo", [{}])[0]
                 url_img = infos.get("thumburl") or infos.get("url")
-                # On filtre pour garder uniquement les vraies photos (JPG/PNG)
                 if url_img and any(url_img.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png"]):
                     urls_valides.append(url_img)
                     
@@ -122,8 +143,14 @@ def obtenir_image_internet_dynamique(mot_cle):
     except Exception:
         pass
         
-    # Image de secours garantie si le mot-clé est introuvable
-    return "https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80"
+    # 3. Secours varié (au lieu d'une seule image fixe)
+    secours = [
+        "https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80",
+        "https://images.unsplash.com/photo-1581091226825-a6a25aee158?w=800&q=80",
+        "https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=800&q=80",
+        "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&q=80"
+    ]
+    return random.choice(secours)
     
 if "reglages" not in st.session_state:
     st.session_state["reglages"] = charger_reglages()

@@ -91,22 +91,20 @@ import random
 def obtenir_image_internet_dynamique(sujet):
     sujet_lower = sujet.lower()
     
-    # 1. On convertit le thème français en mots-clés précis qui donnent des milliers de résultats sur Wikimedia
-    if any(m in sujet_lower for m in ["vitrine", "enseigne", "commerce", "magasin", "boutique"]):
+    # 1. Conversion du thème ou de la catégorie Pydantic en mots-clés Wikimedia
+    if any(m in sujet_lower for m in ["vitrine", "enseigne", "commerce", "magasin", "boutique", "storefront"]):
         mot_cle = random.choice(["storefront", "shop window", "retail store", "neon sign"])
-    elif any(m in sujet_lower for m in ["chantier", "panneau", "immobilier", "travaux", "bâtiment"]):
+    elif any(m in sujet_lower for m in ["chantier", "panneau", "immobilier", "travaux", "bâtiment", "signage"]):
         mot_cle = random.choice(["construction site", "architectural blueprint", "building construction", "real estate sign"])
     elif any(m in sujet_lower for m in ["restaurant", "menu", "carte", "bouche"]):
         mot_cle = random.choice(["restaurant menu", "cafe interior", "bakery display", "bistro"])
-    elif any(m in sujet_lower for m in ["imprimerie", "flyer", "carte de visite", "imprimé", "brochure"]):
+    elif any(m in sujet_lower for m in ["imprimerie", "flyer", "carte de visite", "imprimé", "brochure", "printing", "businesscard"]):
         mot_cle = random.choice(["printing press", "offset printing", "graphic design", "paper printing"])
     elif any(m in sujet_lower for m in ["événement", "saisonnière", "fête"]):
         mot_cle = random.choice(["trade show booth", "exhibition stand", "event banner"])
     else:
-        # Si l'utilisateur a tapé un mot-clé libre, on l'utilise directement
         mot_cle = sujet.strip()
 
-    # 2. Recherche sur Wikimedia Commons avec un décalage aléatoire (gsroffset) pour ne pas avoir toujours les 20 premières
     decalage_aleatoire = random.randint(0, 30)
     url_api = "https://commons.wikimedia.org/w/api.php"
     params = {
@@ -114,7 +112,7 @@ def obtenir_image_internet_dynamique(sujet):
         "generator": "search",
         "gsrsearch": f"filetype:bitmap {mot_cle}",
         "gsrnamespace": 6,
-        "gsrlimit": 20,
+        "gsrlimit": 25,
         "gsroffset": decalage_aleatoire,
         "prop": "imageinfo",
         "iiprop": "url",
@@ -126,7 +124,7 @@ def obtenir_image_internet_dynamique(sujet):
     }
     
     try:
-        reponse = requests.get(url_api, params=params, headers=headers, timeout=8)
+        reponse = requests.get(url_api, params=params, headers=headers, timeout=10)
         if reponse.status_code == 200:
             donnees = reponse.json()
             pages = donnees.get("query", {}).get("pages", {})
@@ -135,15 +133,18 @@ def obtenir_image_internet_dynamique(sujet):
             for page in pages.values():
                 infos = page.get("imageinfo", [{}])[0]
                 url_img = infos.get("thumburl") or infos.get("url")
-                if url_img and any(url_img.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png"]):
-                    urls_valides.append(url_img)
+                if url_img:
+                    # CORRECTION : On vérifie l'extension dans le chemin de l'URL pour accepter les miniatures Wikimedia
+                    parsed_path = urllib.parse.urlparse(url_img).path.lower()
+                    if any(parsed_path.endswith(ext) for ext in [".jpg", ".jpeg", ".png"]):
+                        urls_valides.append(url_img)
                     
             if urls_valides:
                 return random.choice(urls_valides)
     except Exception:
         pass
         
-    # 3. Secours varié (au lieu d'une seule image fixe)
+    # Secours en cas de panne réseau avérée
     secours = [
         "https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80",
         "https://images.unsplash.com/photo-1581091226825-a6a25aee158?w=800&q=80",
@@ -178,22 +179,13 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-def _appel_unique_ia(modele: str, prompt: str, config_args: dict, theme_recherche: str = "", prosp_offre: str = "") -> str:
-    # On enrichit le prompt pour que l'IA sache exactement quel visuel générer
-    prompt_complet = f"""
-    {prompt}
-    
-    INSTRUCTION SPÉCIALE POUR LE VISUEL (champ 'prompt_image_humour') : 
-    Rédige un prompt en anglais très détaillé, propre et professionnel pour Pollinations.ai, représentant une illustration ou une scène en lien direct avec le thème : '{theme_recherche}' et l'offre commerciale : '{prosp_offre}'. Pas de texte parasite sur l'image.
-    """
-    
+def _appel_unique_ia(modele: str, prompt: str, config_args: dict) -> str:
     response = client.models.generate_content(
         model=modele,
-        contents=prompt_complet,
+        contents=prompt,
         config=types.GenerateContentConfig(**config_args)
     )
     return response.text
-
 
 def appeler_gemini_patient(prompt: str, schema=None, temperature: float = 0.85):
     """Appelle toujours la vraie IA Google avec chronomètre de 90s max par essai."""
@@ -659,13 +651,13 @@ if image_selectionnee is not None:
 
     # 3. Bouton de génération de la newsletter par Gemini
 # 3. Bouton de génération de la newsletter par Gemini
-    if st.button("✨ Rédiger la Newsletter", type="primary", key="btn_generer_newsletter_pro"):
+if st.button("✨ Rédiger la Newsletter", type="primary", key="btn_generer_newsletter_pro"):
         
         prompt_complet = f"""Tu es le dirigeant de : {p_identite}.
 Rédige une édition INÉDITE et ORIGINALE de newsletter LinkedIn destinée aux dirigeants, commerçants et artisans locaux.
 
 SUJET À TRAITER : {sujet_final}
-INSPIRATION DU MOMENT (facultative, à relier naturellement si pertinent) : {actu_du_jour}
+INSPIRATION DU MOMENT : {actu_du_jour}
 STYLE ET TON : {p_style}
 
 STRUCTURE OBLIGATOIRE À SUIVRE :
@@ -676,26 +668,23 @@ STRUCTURE OBLIGATOIRE À SUIVRE :
 RÈGLES VISUELLES STRICTES DE MISE EN PAGE :
 - Aère le texte au maximum avec des paragraphes très courts (3 lignes max).
 - Utilise un émoji pertinent en début de chaque bloc ou conseil (ex: 💡, 📐, 🖨️, 📍).
-- Sépare CHAQUE grande partie (titre, introduction, chaque conseil, conclusion) par une ligne contenant uniquement : ---
+- Sépare CHAQUE grande partie par une ligne contenant uniquement : ---
 
 Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'introduction avant le titre."""
 
         with st.spinner("✍️ Rédaction de la newsletter par l'IA..."):
-            # FIX : On passe le schéma Pydantic pour contraindre l'IA à retourner du JSON structuré
             reponse_brute, erreur_ia = appeler_gemini_patient(prompt_complet, schema=NewsletterReponse, temperature=0.7)
 
         if erreur_ia:
             st.error(f"Erreur lors de la génération : {erreur_ia}")
         elif reponse_brute:
             try:
-                # FIX : On valide et parse la réponse brute avec notre modèle Pydantic
                 resultat_ia = NewsletterReponse.model_validate_json(reponse_brute)
                 
-                # FIX : Connexion propre de la catégorie au moteur d'image dynamique si le mode auto est actif
+                # Récupération dynamique Wikimedia basée sur la catégorie propre de l'IA
                 if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
                     image_selectionnee = obtenir_image_internet_dynamique(resultat_ia.categorie_produit)
                 
-                # Stockage sécurisé en session
                 st.session_state["derniere_newsletter"] = resultat_ia.texte_newsletter
                 st.session_state["derniere_image_nl"] = image_selectionnee
                 

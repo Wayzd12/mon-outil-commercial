@@ -70,6 +70,21 @@ def sauvegarder_reglages_sur_disque(nouveaux_reglages: dict):
     except Exception:
         pass
         
+def charger_reglages():
+    # On part d'une copie de ton dictionnaire complet REGLAGES_PAR_DEFAUT
+    reglages = REGLAGES_PAR_DEFAUT.copy()
+    
+    # Si ton fichier de sauvegarde existe, on met à jour avec tes réglages enregistrés
+    if os.path.exists(FICHIER_REGLAGES):
+        try:
+            with open(FICHIER_REGLAGES, "r", encoding="utf-8") as f:
+                donnees_chargees = json.load(f)
+                reglages.update(donnees_chargees)
+        except Exception:
+            pass
+            
+    return reglages
+    
 def obtenir_image_internet_dynamique(sujet):
     # Nettoyage et formatage du mot-clé entré par l'utilisateur
     mot_cle_propre = urllib.parse.quote(sujet.strip())

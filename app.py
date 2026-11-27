@@ -547,9 +547,11 @@ with tab1:
     themes_predefinis = [
         "🖨️ L'importance des supports imprimés (flyers, cartes de visite) face au tout-numérique",
         "🏪 Dynamiser la vitrine et l'enseigne de son commerce local",
+        "🗺️ Plans architecturales/chantier : avoir les bonnes idées en tête"
         "🏗️ Signalétique de chantier et panneaux immobiliers : être visible sur le terrain",
         "🍽️ Restaurants & Métiers de bouche : valoriser ses menus et sa carte",
         "🎁 Préparer ses événements commerciaux et opérations saisonnières",
+        "💾 L'importance des petites siganletiques : Clé USB, Stylo etc personnalisé"
         "✍️ Saisir un sujet personnalisé libre..."
     ]
 

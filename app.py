@@ -541,49 +541,49 @@ tab1, tab2 = st.tabs(["📝 Ma Newsletter LinkedIn", "🎯 Prospection & Carte L
 # ONGLET 1 : GÉNÉRATEUR DE NEWSLETTER & VISUELS PROFESSIONNELS
 # ==============================================================================
 with tab1:
-        st.header("📰 Générateur de Newsletter LinkedIn & Illustration")
-            
-            # 1. Choix du thème (Liste déroulante + Option de saisie libre)
-            themes_predefinis = [
-                "🖨️ L'importance des supports imprimés (flyers, cartes de visite) face au tout-numérique",
-                "🏪 Dynamiser la vitrine et l'enseigne de son commerce local",
-                "🏗️ Signalétique de chantier et panneaux immobiliers : être visible sur le terrain",
-                "🍽️ Restaurants & Métiers de bouche : valoriser ses menus et sa carte",
-                "🎁 Préparer ses événements commerciaux et opérations saisonnières",
-                "✍️ Saisir un sujet personnalisé libre..."
-            ]
-        
-            choix_theme = st.selectbox(
-                "Sujet principal de la newsletter (choisissez un thème ou écrivez le vôtre) :",
-                themes_predefinis,
-                key="select_theme_nl"
-            )
-        
-            if choix_theme == "✍️ Saisir un sujet personnalisé libre...":
-                sujet_final = st.text_input(
-                    "Écrivez votre propre sujet :", 
-                    value="Comment bien préparer ses supports de communication pour la rentrée",
-                    key="input_sujet_newsletter"
-                )
-            else:
-                # Retire l'émoji du début pour obtenir un texte propre pour Gemini
-                sujet_final = choix_theme.split(" ", 1)[1]
-            
-            actu_du_jour = st.text_input(
-                "Inspiration du moment / Actualité (optionnel) :", 
-                value="", 
-                placeholder="Ex: Arrivée du printemps, fêtes de fin d'année, chantier en cours...",
-                key="input_actu_newsletter"
-            )
-        
-            with st.expander("⚙️ Paramètres du style et de la structure de la newsletter"):
-                p_identite = st.text_input("Identité de l'expéditeur :", value="Imprimerie Centre DIGITALIS Agglomération (34130 Mudaison)", key="nl_p_identite")
-                p_style = st.text_input("Style d'écriture :", value="Chaleureux, concret, direct, comme un artisan-conseil local", key="nl_p_style")
-                p_intro = st.text_area("Consigne Introduction :", value="Commence par un titre accrocheur, puis une ligne '---'. Rédige une intro de 3 lignes max ancrée à Mudaison, puis '---'.", key="nl_p_intro")
-                p_corps = st.text_area("Consigne Développement (3 conseils) :", value="Propose 3 conseils commençant par un émoji (ex: 💡), séparés par '---', avec une ligne en gras '**Ce que ça change pour vous :**'.", key="nl_p_corps")
-                p_conclusion = st.text_area("Consigne Conclusion :", value="Termine par '---', puis 2 lignes de conclusion positives et une question ouverte.", key="nl_p_conclusion")
-        
-            st.markdown("---")
+    st.header("📰 Générateur de Newsletter LinkedIn & Illustration")
+    
+    # 1. Choix du thème (Liste déroulante + Option de saisie libre)
+    themes_predefinis = [
+        "🖨️ L'importance des supports imprimés (flyers, cartes de visite) face au tout-numérique",
+        "🏪 Dynamiser la vitrine et l'enseigne de son commerce local",
+        "🏗️ Signalétique de chantier et panneaux immobiliers : être visible sur le terrain",
+        "🍽️ Restaurants & Métiers de bouche : valoriser ses menus et sa carte",
+        "🎁 Préparer ses événements commerciaux et opérations saisonnières",
+        "✍️ Saisir un sujet personnalisé libre..."
+    ]
+
+    choix_theme = st.selectbox(
+        "Sujet principal de la newsletter (choisissez un thème ou écrivez le vôtre) :",
+        themes_predefinis,
+        key="select_theme_nl"
+    )
+
+    if choix_theme == "✍️ Saisir un sujet personnalisé libre...":
+        sujet_final = st.text_input(
+            "Écrivez votre propre sujet :", 
+            value="Comment bien préparer ses supports de communication pour la rentrée",
+            key="input_sujet_newsletter"
+        )
+    else:
+        # Retire l'émoji du début pour obtenir un texte propre pour Gemini
+        sujet_final = choix_theme.split(" ", 1)[1]
+    
+    actu_du_jour = st.text_input(
+        "Inspiration du moment / Actualité (optionnel) :", 
+        value="", 
+        placeholder="Ex: Arrivée du printemps, fêtes de fin d'année, chantier en cours...",
+        key="input_actu_newsletter"
+    )
+
+    with st.expander("⚙️ Paramètres du style et de la structure de la newsletter"):
+        p_identite = st.text_input("Identité de l'expéditeur :", value="Imprimerie Centre DIGITALIS Agglomération (34130 Mudaison)", key="nl_p_identite")
+        p_style = st.text_input("Style d'écriture :", value="Chaleureux, concret, direct, comme un artisan-conseil local", key="nl_p_style")
+        p_intro = st.text_area("Consigne Introduction :", value="Commence par un titre accrocheur, puis une ligne '---'. Rédige une intro de 3 lignes max ancrée à Mudaison, puis '---'.", key="nl_p_intro")
+        p_corps = st.text_area("Consigne Développement (3 conseils) :", value="Propose 3 conseils commençant par un émoji (ex: 💡), séparés par '---', avec une ligne en gras '**Ce que ça change pour vous :**'.", key="nl_p_corps")
+        p_conclusion = st.text_area("Consigne Conclusion :", value="Termine par '---', puis 2 lignes de conclusion positives et une question ouverte.", key="nl_p_conclusion")
+
+    st.markdown("---")
     
     # 2. Sélection de l'image (Automatique, Mot-clé ou Import PC)
 st.subheader("🌐 Illustration de la publication (En direct du web)")

@@ -810,7 +810,7 @@ with tab2:
                 "📏 Taille de la zone de recherche (rayon en km) :",
                 min_value=1,
                 max_value=50,
-                value=int(reg["rayon_km"]),
+                value=int(st.session_state["reglages"]["rayon_km"]),
                 key="slider_rayon_km"
             )
         with col_z2:

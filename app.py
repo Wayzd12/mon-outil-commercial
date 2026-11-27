@@ -679,7 +679,7 @@ RÈGLES VISUELLES STRICTES DE MISE EN PAGE :
 
 Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'introduction avant le titre."""
 
-        with st.spinner("✍️ Rédaction de la newsletter par l'IA..."):
+with st.spinner("✍️ Rédaction de la newsletter par l'IA..."):
             reponse_brute, erreur_ia = appeler_gemini_patient(prompt_complet, schema=NewsletterReponse, temperature=0.7)
 
         if erreur_ia:
@@ -691,7 +691,15 @@ Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'i
                 if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
                     image_selectionnee = obtenir_image_internet_dynamique(resultat_ia.categorie_produit)
                 
-                st.session_state["derniere_newsletter"] = resultat_ia.texte_newsletter
+                # NETTOYAGE AUTOMATIQUE : On force de vrais retours à la ligne autour des séparateurs ---
+                texte_formate = (
+                    resultat_ia.texte_newsletter
+                    .replace(" --- ", "\n\n---\n\n")
+                    .replace("---", "\n\n---\n\n")
+                )
+                
+                # Stockage en session du texte parfaitement aéré
+                st.session_state["derniere_newsletter"] = texte_formate
                 st.session_state["derniere_image_nl"] = image_selectionnee
                 
                 st.success("✅ Newsletter générée avec succès !")

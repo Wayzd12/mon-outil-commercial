@@ -658,6 +658,7 @@ if image_selectionnee is not None:
     st.markdown("---")
 
     # 3. Bouton de génération de la newsletter par Gemini
+# 3. Bouton de génération de la newsletter par Gemini
     if st.button("✨ Rédiger la Newsletter", type="primary", key="btn_generer_newsletter_pro"):
         
         prompt_complet = f"""Tu es le dirigeant de : {p_identite}.
@@ -680,25 +681,30 @@ RÈGLES VISUELLES STRICTES DE MISE EN PAGE :
 Rédige uniquement la newsletter prête à publier sur LinkedIn, sans phrase d'introduction avant le titre."""
 
         with st.spinner("✍️ Rédaction de la newsletter par l'IA..."):
-            texte_newsletter_genere, erreur_ia = appeler_gemini_patient(prompt_complet, temperature=0.7)
+            # FIX : On passe le schéma Pydantic pour contraindre l'IA à retourner du JSON structuré
+            reponse_brute, erreur_ia = appeler_gemini_patient(prompt_complet, schema=NewsletterReponse, temperature=0.7)
 
         if erreur_ia:
             st.error(f"Erreur lors de la génération : {erreur_ia}")
-        elif texte_newsletter_genere:
-            st.success("✅ Newsletter générée avec succès !")
-
-        # 2. C'est ICI qu'on place le code pour l'image automatique et le stockage en session :
-        if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
-            # On utilise directement le mot-clé propre renvoyé par Gemini (ex: 'printing', 'storefront'...)
-            image_selectionnee = obtenir_image_internet_dynamique(resultat_ia.categorie_produit)
-        else:
-            # Si tu avais choisi une recherche manuelle ou un import PC, on garde ta sélection
-            image_selectionnee = image_selectionnee 
-
-        # 3. Stockage en session pour l'affichage persistant en 2 colonnes
-        st.session_state["derniere_newsletter"] = resultat_ia.texte_newsletter
-        st.session_state["derniere_image_nl"] = image_selectionnee
-
+        elif reponse_brute:
+            try:
+                # FIX : On valide et parse la réponse brute avec notre modèle Pydantic
+                resultat_ia = NewsletterReponse.model_validate_json(reponse_brute)
+                
+                # FIX : Connexion propre de la catégorie au moteur d'image dynamique si le mode auto est actif
+                if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
+                    image_selectionnee = obtenir_image_internet_dynamique(resultat_ia.categorie_produit)
+                
+                # Stockage sécurisé en session
+                st.session_state["derniere_newsletter"] = resultat_ia.texte_newsletter
+                st.session_state["derniere_image_nl"] = image_selectionnee
+                
+                st.success("✅ Newsletter générée avec succès !")
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Erreur de formatage de la réponse par l'IA : {e}")
+                
 # 4. Affichage persistant du résultat si présent en mémoire (Disposition 2 colonnes : Texte à gauche | Image à droite)
     if "derniere_newsletter" in st.session_state and st.session_state["derniere_newsletter"]:
         st.markdown("---")

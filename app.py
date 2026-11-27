@@ -629,8 +629,9 @@ with tab1:
     image_selectionnee = None
 
     if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
-        mots_cles_auto = " ".join(sujet_final.split()[:3])
-        image_selectionnee = obtenir_image_internet_dynamique(mots_cles_auto)
+        # En mode automatique, l'image sera choisie dynamiquement par l'IA lors du clic sur le bouton
+        st.info("🖼️ Image choisie automatiquement en fonction du sujet de la newsletter.")
+        image_selectionnee = "auto"  valeur témoin pour déclencher la recherche après la génération de l'IA
 
     elif mode_image == "🔍 Taper un mot-clé précis pour chercher sur Internet":
         mot_cle_libre = st.text_input(
@@ -639,6 +640,10 @@ with tab1:
             key="input_mot_cle_libre"
         )
         image_selectionnee = obtenir_image_internet_dynamique(mot_cle_libre)
+        # Affichage compact et centré de l'image sélectionnée manuellement
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.image(image_selectionnee, width=450, caption="Aperçu de l'image sélectionnée")
 
     elif mode_image == "💻 Importer une photo depuis mon ordinateur":
         fichier_upload = st.file_uploader(
@@ -648,13 +653,10 @@ with tab1:
         )
         if fichier_upload is not None:
             image_selectionnee = fichier_upload
-
-    # Affichage compact et centré de l'image sélectionnée
-    if image_selectionnee is not None:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.image(image_selectionnee, width=450, caption="Aperçu de l'image sélectionnée")
-       
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.image(image_selectionnee, width=450, caption="Aperçu de l'image importée")
+   
     st.markdown("---")
 
     # 3. Bouton de génération de la newsletter par Gemini

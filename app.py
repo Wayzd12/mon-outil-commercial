@@ -9,6 +9,7 @@ import requests
 import feedparser
 import urllib.parse
 import folium
+import urllib.parse
 import streamlit as st
 from streamlit_folium import st_folium
 from concurrent.futures import ThreadPoolExecutor
@@ -60,51 +61,6 @@ REGLAGES_PAR_DEFAUT = {
     "zone_lon": 4.0440,   # Longitude centrée sur Mudaison
     "rayon_km": 10
 }
-CATALOGUE_ALEATOIRE = {
-    "chantier": [
-        "https://images.unsplash.com/photo-1541888946425-d0fbb18f154d?auto=format&fit=crop&w=1200&q=80",
-        "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1200&q=80"
-    ],
-    "commerce": [
-        "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=80",
-        "https://images.unsplash.com/photo-1555529771-835f59fc5efe?auto=format&fit=crop&w=1200&q=80"
-    ],
-    "imprimerie": [
-        "https://images.unsplash.com/photo-1562564055-71e051d33c19?auto=format&fit=crop&w=1200&q=80",
-        "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=1200&q=80"
-    ],
-    "signaletique": [
-        "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80",
-        "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80"
-    ],
-    "defaut": [
-        "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1200&q=80",
-        "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80"
-    ]
-}
-
-def obtenir_image_aleatoire(sujet):
-    sujet_lower = sujet.lower()
-    categorie = "defaut"
-    if any(m in sujet_lower for m in ["chantier", "travaux", "bâtiment"]):
-        categorie = "chantier"
-    elif any(m in sujet_lower for m in ["commerce", "boutique", "magasin", "vitrine"]):
-        categorie = "commerce"
-    elif any(m in sujet_lower for m in ["impression", "flyer", "affiche", "carte"]):
-        categorie = "imprimerie"
-    elif any(m in sujet_lower for m in ["enseigne", "panneau", "signalétique"]):
-        categorie = "signaletique"
-    return random.choice(CATALOGUE_ALEATOIRE[categorie])
-def charger_reglages():
-    donnees = REGLAGES_PAR_DEFAUT.copy()
-    if os.path.exists(FICHIER_REGLAGES):
-        try:
-            with open(FICHIER_REGLAGES, "r", encoding="utf-8") as f:
-                sauvegarde = json.load(f)
-                donnees.update(sauvegarde)
-        except Exception:
-            pass
-    return donnees
 
 def sauvegarder_reglages_sur_disque(nouveaux_reglages: dict):
     st.session_state["reglages"].update(nouveaux_reglages)
@@ -113,7 +69,18 @@ def sauvegarder_reglages_sur_disque(nouveaux_reglages: dict):
             json.dump(st.session_state["reglages"], f, ensure_ascii=False, indent=2)
     except Exception:
         pass
-
+        
+def obtenir_image_internet_dynamique(sujet):
+    # Nettoyage et formatage du mot-clé entré par l'utilisateur
+    mot_cle_propre = urllib.parse.quote(sujet.strip())
+    
+    # Cette URL officielle Unsplash interroge leur moteur en direct à chaque appel
+    # Le paramètre 'sig' (signature aléatoire) force le serveur à changer d'image à chaque fois
+    sig_aleatoire = random.randint(1, 10000)
+    
+    url_dynamique = f"https://source.unsplash.com/featured/800x600/?{mot_cle_propre}&sig={sig_aleatoire}"
+    return url_dynamique
+    
 if "reglages" not in st.session_state:
     st.session_state["reglages"] = charger_reglages()
 
@@ -556,31 +523,31 @@ with tab1:
     st.markdown("---")
     
     # 2. Sélection de l'image (Automatique, Mot-clé ou Import PC)
-    st.subheader("🖼️ Choix de l'illustration")
+st.subheader("🌐 Illustration de la publication (En direct du web)")
+    
     mode_image = st.radio(
-        "Comment souhaitez-vous choisir l'image ?",
+        "Source de l'image :",
         [
-            "🤖 Automatique & Aléatoire (selon le sujet)", 
-            "🔍 Rechercher par mot-clé dans le catalogue", 
+            "🤖 Automatique (selon le sujet de la newsletter)", 
+            "🔍 Taper un mot-clé précis pour chercher sur Internet",
             "💻 Importer une photo depuis mon ordinateur"
         ],
-        key="radio_mode_selection_image"
+        key="radio_mode_internet"
     )
 
     image_selectionnee = None
 
-    if mode_image == "🤖 Automatique & Aléatoire (selon le sujet)":
-        image_selectionnee = obtenir_image_aleatoire(sujet_final)
-        st.image(image_selectionnee, caption="Illustration sélectionnée automatiquement et aléatoirement", use_container_width=True)
+    if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
+        mots_cles_auto = " ".join(sujet_final.split()[:3])
+        image_selectionnee = obtenir_image_internet_dynamique(mots_cles_auto)
 
-    elif mode_image == "🔍 Rechercher par mot-clé dans le catalogue":
-        mot_cle_perso = st.text_input(
-            "Entrez un mot-clé (chantier, commerce, imprimerie, bureau, signaletique...)", 
-            value="imprimerie", 
-            key="input_mot_cle_perso"
+    elif mode_image == "🔍 Taper un mot-clé précis pour chercher sur Internet":
+        mot_cle_libre = st.text_input(
+            "Entrez un mot-clé (ex: printing press, modern shop, construction...)", 
+            value="printing press", 
+            key="input_mot_cle_libre"
         )
-        image_selectionnee = obtenir_image_aleatoire(mot_cle_perso)
-        st.image(image_selectionnee, caption=f"Résultat dans le catalogue pour : '{mot_cle_perso}'", use_container_width=True)
+        image_selectionnee = obtenir_image_internet_dynamique(mot_cle_libre)
 
     elif mode_image == "💻 Importer une photo depuis mon ordinateur":
         fichier_upload = st.file_uploader(
@@ -590,9 +557,12 @@ with tab1:
         )
         if fichier_upload is not None:
             image_selectionnee = fichier_upload
-            st.image(fichier_upload, caption="Votre photo personnelle importée", use_container_width=True)
-        else:
-            st.info("Veuillez glisser-déposer ou sélectionner une image depuis votre PC.")
+
+    # Affichage compact et centré de l'image sélectionnée
+    if image_selectionnee is not None:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.image(image_selectionnee, width=450, caption="Aperçu de l'image sélectionnée")
 
     st.markdown("---")
 

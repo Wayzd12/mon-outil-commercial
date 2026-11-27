@@ -631,7 +631,7 @@ with tab1:
     if mode_image == "🤖 Automatique (selon le sujet de la newsletter)":
         # En mode automatique, l'image sera choisie dynamiquement par l'IA lors du clic sur le bouton
         st.info("🖼️ Image choisie automatiquement en fonction du sujet de la newsletter.")
-        image_selectionnee = "auto"  valeur témoin pour déclencher la recherche après la génération de l'IA
+        image_selectionnee = "auto"  #valeur témoin pour déclencher la recherche après la génération de l'IA
 
     elif mode_image == "🔍 Taper un mot-clé précis pour chercher sur Internet":
         mot_cle_libre = st.text_input(
